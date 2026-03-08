@@ -27,9 +27,10 @@ Se os campos contiverem palavras-chave genéricas como `"MEUCNPJ"`, `"Minhainscr
 Neste caso, pause a tarefa dele e inicie um **Wizard de Instalação Interativo e Amigável** no chat:
 1. Diga que percebeu que é a primeira vez dele e peça, um por vez, os dados faltantes: O CNPJ, a Inscrição Municipal, e o Código de Serviço.
 2. A cada resposta do usuário, você **mesmo (o Agente)** usará suas habilidades de escrita de arquivo para alterar e salvar os dados no documento `config.json` por ele.
-3. Quando todas as perguntas do JSON acabarem, informe-o sobre a etapa final de segurança (A Senha e o Certificado) orientando-o exatamente desta forma:
-> *"Pronto, preenchi os dados da sua empresa! Agora, por questões rigorosas de segurança bancária e proteção, vou pedir que você faça a última etapa manualmente. Abra a pasta técnica deste projeto no seu computador (geralmente em `~/.openclaw/workspace/skills/`). Arraste para lá o seu arquivo de certificado real (ex: `Certificado.p12`). Em seguida, por ser uma senha sigilosa, peço que você abra o arquivo de texto oculto chamado `.env` (se vc usa Mac, aperte `Command + Shift + .` para ver os arquivos ocultos) e cole a sua senha lá dentro. Me avise no chat quando terminar!"*
-4. Após o usuário confirmar que fez as cópias, atualize no `config.json` o nome exato do arquivo `.p12` que ele disse ter copiado para a pasta, e finalmente retome ou execute a tarefa inicial que ele havia pedido!
+3. **Ato Autônomo com o .env:** Antes de falar com o usuário sobre a senha, use suas próprias ferramentas de terminal para copiar (ou renomear) o arquivo modelo `.env.example` para `.env` na pasta. Deixe este arquivo preparado para receber a senha.
+4. Quando tudo isso acabar e o `.env` oculto estiver pronto, informe-o sobre a etapa final de segurança (A Senha e o Certificado) orientando-o exatamente desta forma:
+> *"Pronto, preenchi os dados da sua empresa e preparei o terreno! Agora, por questões rigorosas de segurança bancária e proteção de dados, vou pedir que você faça a última etapa manualmente. Abra a pasta técnica deste projeto no seu computador (geralmente em `~/.openclaw/workspace/skills/`). Arraste para lá o seu arquivo de certificado real (ex: `Certificado.p12`). Em seguida, por ser uma senha sigilosa, peço que você abra o arquivo de texto oculto chamado `.env` (se vc usa Mac, aperte `Command + Shift + .` para ver os arquivos ocultos) e cole a senha do certificado lá dentro no campo indicado. Me avise no chat quando terminar!"*
+5. Após o usuário confirmar que fez as cópias, atualize no `config.json` o nome exato do arquivo `.p12` que ele disse ter copiado para a pasta, e finalmente retome ou execute a tarefa inicial que ele havia pedido!
 
 ---
 
