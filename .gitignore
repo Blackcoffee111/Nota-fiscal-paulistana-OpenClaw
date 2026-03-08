@@ -1,0 +1,22 @@
+# Ambientes Virtuais e Cache
+venv/
+__pycache__/
+*.pyc
+
+# Arquivos Sensíveis (NUNCA SUBIR PARA O GITHUB)
+*.p12
+.env
+
+# Arquivos de Debug e Temporários
+debug_*.xml
+/tmp/
+
+# Sistema Operacional
+.DS_Store
+
+# Dados Locais (Opcional: Descomente se não quiser subir o banco de clientes e contadores pro github)
+# tomadores.json
+# contador_rps.txt
+# dados_nota.json
+
+nfse_contabilidade.json
