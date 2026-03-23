@@ -18,18 +18,26 @@ Nós programamos um *Assistente de Instalação (Wizard)* embutido.
 
 Se você não quer mexer em nenhum arquivo de texto, basta fazer o seguinte:
 1. Abra o chat do seu OpenClaw.
-2. Diga a ele algo como: *"Emita uma Nota Usando a Nova Skill que acabei de instalar"* ou *"Preciso testar a skill de nota fiscal"*.
-3. **Imediatamente**, o robô perceberá que este é seu primeiro acesso, pausará tudo, e vai entrevistar você no próprio chat! Ele perguntará qual o seu CNPJ, qual o seu registro na Prefeitura, e etc. Você só precisa responder conversando, e ele preencherá as configurações nos bastidores para você! 
-
-No final da conversa, o robô pedirá apenas que você faça os **Passos 3 e 4** abaixo manualmente por rigorosas razões de segurança bancária.
+2. Diga a ele algo como: *"Emita uma Nota"* ou *"Preciso testar a skill de nota fiscal"*.
+3. **Imediatamente**, o robô perceberá que este é seu primeiro acesso e iniciará os preparativos:
+    *   **Auto-Instalação:** Ele rodará as ferramentas necessárias automaticamente para garantir que seu Python esteja pronto.
+    *   **Entrevista:** Ele perguntará pelo chat o seu CNPJ, Inscrição Municipal, Código de Serviço e a sua **Alíquota de ISS** (Se você não souber o imposto, ele pesquisa no Google para você!).
+    *   **Segurança:** Ele criará o arquivo secreto para a sua senha e pedirá para você preenchê-lo manualmente por segurança.
+4. **Respeito à Privacidade:** O robô nunca lê a sua senha no arquivo `.env`. Ele confia que você a inseriu e pula direto para a validação!
 
 ---
 
-### 3. Onde coloco o meu Certificado Digital?
-Você precisará do seu certificado digital (aquele arquivo `.p12` ou `.pfx` concedido pelo governo ou seu contador).
-- Pegue o seu próprio arquivo e **cole-o dentro da pasta** onde estão o resto dos arquivos do projeto. Se o robô não souber o nome do seu certificado, não tem problema: ele perguntará o nome do arquivo para você lá no chat!
+### 3. O Passo Final: O "Batismo de Fogo" 🔥
+Assim que você configurar seu Certificado e Senha (conforme os Passos 4 e 5 abaixo), o robô não encerrará a conversa até realizar um **Faturamento de Teste Real de R$ 150,00**. 
+- Isso serve para garantir que a sua assinatura digital está funcionando perfeitamente e que a prefeitura de São Paulo aceita a sua conexão. Só depois desse teste bem-sucedido é que o sistema é liberado para notas reais!
 
-### 4. Onde eu coloco a SENHA do meu Certificado?
+---
+
+### 4. Onde coloco o meu Certificado Digital?
+Você precisará do seu certificado digital (aquele arquivo `.p12` ou `.pfx` concedido pelo governo ou seu contador).
+- Pegue o seu próprio arquivo e **cole-o dentro da pasta** onde estão o resto dos arquivos do projeto. O robô perguntará o nome do arquivo para você lá no chat para salvar no seu perfil!
+
+### 5. Onde eu coloco a SENHA do meu Certificado?
 No mundo dos desenvolvedores, colocar senha mestra diretamente no chat ou em arquivos tradicionais é perigoso. Por isso, a sua senha vai morar num arquivo "secreto" e seguro chamado **`.env`** (Sim, ele começa com um ponto final mesmo!).
 
 - Abra esse arquivo `.env` usando o Bloco de Notas ou o editor de texto do seu computador.
@@ -37,16 +45,15 @@ No mundo dos desenvolvedores, colocar senha mestra diretamente no chat ou em arq
 - Apague toda a frase da direita e digite a sua verdadeira senha **colada** ao sinal de Igual `=`.
 - Ficará assim: `NFSE_CERT_PASSWORD=senha123` (Salve e feche).
 
-*(Dica: Computadores Mac costumam esconder da sua visão arquivos que começam com um ponto para evitar que as crianças o apaguem. Se você não estiver vendo o `.env` ou o `.gitignore` na tela da sua pasta, aperte `Command + Shift + .` (Ponto) para o seu Mac revelar os arquivos fantasma!)*
+*(Dica: Computadores Mac costumam esconder da sua visão arquivos que começam com um ponto. Se você não estiver vendo o `.env` ou o `.gitignore`, aperte `Command + Shift + .` (Ponto) para o seu Mac revelar os arquivos ocultos!)*
 
 ---
 
 ### ⚠️ Método Alternativo: Configuração Manual (Para usuários avançados)
 Se, por qualquer motivo, você não quiser conversar com o robô para ele preencher os dados, você pode fazer "na mão":
 - Abra o arquivo **`config.json`**.
-- Troque os campos `"MEUCNPJ"`, `"Minhainscricao"`, `"Meucodigo"`, e `"MEUCertificado.p12"` pelos seus dados reais, sempre mantendo as aspas.
-- Inclusive, no final desse arquivo há o campo `"mensagem_padrao": ""`, onde você pode digitar leis ou dados bancários que sairão no rodapé de todas as notas fiscais emitidas!
-
+- Troque os campos `"MEUCNPJ"`, `"Minhainscricao"`, `"Meucodigo"`, e `"MEUCertificado.p12"` pelos seus dados reais.
+- No campo `"aliquota_servicos"`, use o formato decimal (ex: `0.02` para 2%).
 
 ### 🚀 6. Pronto pra Voar!
 A sua personalização está 100% terminada.
