@@ -28,7 +28,7 @@ Se você não quer mexer em nenhum arquivo de texto, basta fazer o seguinte:
 ---
 
 ### 3. O Passo Final: O "Batismo de Fogo" 🔥
-Assim que você configurar seu Certificado e Senha (conforme os Passos 4 e 5 abaixo), o robô não encerrará a conversa até realizar um **Faturamento de Teste Real de R$ 150,00**. 
+Assim que você configurar seu Certificado e Senha (conforme os Passos 4 e 5 abaixo), o robô não encerrará a conversa até realizar um **Faturamento Teste de R$ 150,00**. 
 - Isso serve para garantir que a sua assinatura digital está funcionando perfeitamente e que a prefeitura de São Paulo aceita a sua conexão. Só depois desse teste bem-sucedido é que o sistema é liberado para notas reais!
 
 ---
