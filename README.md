@@ -18,7 +18,7 @@ Nós programamos um *Assistente de Instalação (Wizard)* embutido.
 
 Se você não quer mexer em nenhum arquivo de texto, basta fazer o seguinte:
 1. Abra o chat do seu OpenClaw.
-2. Diga a ele algo como: *"Emita uma Nota"* ou *"Preciso testar a skill de nota fiscal"*.
+2. Diga a ele algo como: *"Emita uma Nota Usando a Nova Skill que acabei de instalar"* ou *"Preciso testar a skill de nota fiscal"*.
 3. **Imediatamente**, o robô perceberá que este é seu primeiro acesso, pausará tudo, e vai entrevistar você no próprio chat! Ele perguntará qual o seu CNPJ, qual o seu registro na Prefeitura, e etc. Você só precisa responder conversando, e ele preencherá as configurações nos bastidores para você! 
 
 No final da conversa, o robô pedirá apenas que você faça os **Passos 3 e 4** abaixo manualmente por rigorosas razões de segurança bancária.
