@@ -1,0 +1,5 @@
+requests
+lxml
+signxml
+cryptography
+python-dotenv

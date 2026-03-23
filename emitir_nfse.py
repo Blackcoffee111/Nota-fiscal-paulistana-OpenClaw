@@ -7,6 +7,7 @@ import argparse
 import tempfile
 import requests
 import base64
+import html
 from xml.dom.minidom import parseString
 from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
@@ -53,6 +54,13 @@ def formata_valor(valor):
     return f"{Decimal(str(valor)):.2f}"
 
 
+def escape_xml(text):
+    """Escapa caracteres especiais para XML."""
+    if not text:
+        return ""
+    return html.escape(str(text))
+
+
 def limpa_documento(doc):
     """Remove caracteres não numéricos."""
     return re.sub(r'[^0-9]', '', str(doc))
@@ -67,28 +75,28 @@ def gerar_assinatura_rps(config, nota):
     v_deducoes = int(Decimal(str(nota.get('valor_deducoes', 0))) * 100)
     
     # Campo 1: 8 posicoes, zeros a esquerda
-    inscricao_prestador = str(config['inscricao_municipal']).zfill(8)
-    # Campo 2: 5 posicoes, espacos a direita
-    serie = str(config['serie_rps']).ljust(5)
+    inscricao_prestador = limpa_documento(config['inscricao_municipal']).zfill(8)
+    # Campo 2: 5 posicoes, espacos a direita (removendo pontos e espacos extras)
+    serie = str(config['serie_rps']).strip().upper()[:5].ljust(5)
     # Campo 3: 12 posicoes, zeros a esquerda
-    numero = str(nota['numero_rps']).zfill(12)
+    numero = limpa_documento(nota['numero_rps']).zfill(12)
     # Campo 4: 8 posicoes, AAAAMMDD
     data = str(nota['data_emissao']).replace('-', '')[:8]
     # Campo 5: 1 posicao (na v1, TributacaoRPS tem 1 caractere, nao 2!)
-    tributacao = str(config['tributacao_rps']).ljust(1)
+    tributacao = str(config['tributacao_rps']).strip().upper()[:1].ljust(1)
     # Campo 6: 1 posicao
-    status = str(nota['status_rps'])
+    status = str(nota['status_rps']).strip().upper()[:1]
     # Campo 7: 1 posicao ('S' ou 'N')
-    iss_retido = str(nota['iss_retido'])
+    iss_retido = str(nota['iss_retido']).strip().upper()[:1]
     # Campo 8: 15 posicoes, zeros a esquerda
     vr_servico = str(v_servicos).zfill(15)
     # Campo 9: 15 posicoes, zeros a esquerda
     vr_deducao = str(v_deducoes).zfill(15)
     # Campo 10: 5 posicoes, zeros a esquerda
-    codigo_servico = str(config['codigo_servico']).zfill(5)
+    codigo_servico = limpa_documento(config['codigo_servico']).zfill(5)
     # Campo 11: 1 posicao
-    ind_tomador = str(nota['indicador_tomador'])
-    # Campo 12: 14 posicoes, zeros a esquerda
+    ind_tomador = str(nota['indicador_tomador']).strip()[:1]
+    # Campo 12: 14 posicoes, zeros a esquerda (IMPORTANTE: Se for 3, o documento deve ser zero-filled)
     doc_tomador = limpa_documento(nota.get('documento_tomador', '')).zfill(14)
 
     string_rps = (
@@ -285,7 +293,7 @@ def construir_xml_lote(config, nota, assinatura_rps):
     xml_template = f"""<PedidoEnvioLoteRPS xmlns="http://www.prefeitura.sp.gov.br/nfe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
         <Cabecalho xmlns="" Versao="1">
             <CPFCNPJRemetente>
-                <CNPJ>{config['cnpj_prestador']}</CNPJ>
+                <CNPJ>{limpa_documento(config['cnpj_prestador'])}</CNPJ>
             </CPFCNPJRemetente>
             <transacao>false</transacao>
             <dtInicio>{nota['data_emissao']}</dtInicio>
@@ -297,14 +305,14 @@ def construir_xml_lote(config, nota, assinatura_rps):
         <RPS xmlns="">
             <Assinatura>{assinatura_rps}</Assinatura>
             <ChaveRPS>
-                <InscricaoPrestador>{config['inscricao_municipal']}</InscricaoPrestador>
-                <SerieRPS>{config['serie_rps']}</SerieRPS>
-                <NumeroRPS>{nota['numero_rps']}</NumeroRPS>
+                <InscricaoPrestador>{limpa_documento(config['inscricao_municipal'])}</InscricaoPrestador>
+                <SerieRPS>{str(config['serie_rps']).strip().upper()[:5]}</SerieRPS>
+                <NumeroRPS>{limpa_documento(nota['numero_rps'])}</NumeroRPS>
             </ChaveRPS>
             <TipoRPS>RPS</TipoRPS>
             <DataEmissao>{nota['data_emissao']}</DataEmissao>
-            <StatusRPS>{nota['status_rps']}</StatusRPS>
-            <TributacaoRPS>{config['tributacao_rps']}</TributacaoRPS>
+            <StatusRPS>{str(nota['status_rps']).strip().upper()[:1]}</StatusRPS>
+            <TributacaoRPS>{str(config['tributacao_rps']).strip().upper()[:1]}</TributacaoRPS>
             <ValorServicos>{formata_valor(nota['valor_servicos'])}</ValorServicos>
             <ValorDeducoes>{formata_valor(nota.get('valor_deducoes', 0))}</ValorDeducoes>
             {f"<ValorPIS>{formata_valor(v_pis)}</ValorPIS>" if v_pis > 0 else ""}
@@ -312,13 +320,13 @@ def construir_xml_lote(config, nota, assinatura_rps):
             {f"<ValorINSS>{formata_valor(v_inss)}</ValorINSS>" if v_inss > 0 else ""}
             {f"<ValorIR>{formata_valor(v_ir)}</ValorIR>" if v_ir > 0 else ""}
             {f"<ValorCSLL>{formata_valor(v_csll)}</ValorCSLL>" if v_csll > 0 else ""}
-            <CodigoServico>{config['codigo_servico']}</CodigoServico>
-            <AliquotaServicos>{config['aliquota_servicos']}</AliquotaServicos>
-            <ISSRetido>{'true' if nota['iss_retido'] == 'S' else 'false'}</ISSRetido>
+            <CodigoServico>{limpa_documento(config['codigo_servico'])}</CodigoServico>
+            <AliquotaServicos>{Decimal(str(config['aliquota_servicos'])):.2f}</AliquotaServicos>
+            <ISSRetido>{'true' if str(nota['iss_retido']).upper() == 'S' else 'false'}</ISSRetido>
             <CPFCNPJTomador>
-                <{'CNPJ' if nota['indicador_tomador'] == 2 else 'CPF'}>{limpa_documento(nota.get('documento_tomador', ''))}</{'CNPJ' if nota['indicador_tomador'] == 2 else 'CPF'}>
+                <{'CNPJ' if int(nota['indicador_tomador']) == 2 else 'CPF'}>{limpa_documento(nota.get('documento_tomador', ''))}</{'CNPJ' if int(nota['indicador_tomador']) == 2 else 'CPF'}>
             </CPFCNPJTomador>
-            <RazaoSocialTomador>{nota.get('razao_social_tomador', '')[:75]}</RazaoSocialTomador>
+            <RazaoSocialTomador>{escape_xml(nota.get('razao_social_tomador', ''))[:75]}</RazaoSocialTomador>
             """
             
     # Adicionar endereço tomador se existir
@@ -326,20 +334,20 @@ def construir_xml_lote(config, nota, assinatura_rps):
     if end:
         xml_template += f"""<EnderecoTomador>
                 <TipoLogradouro></TipoLogradouro>
-                <Logradouro>{end.get('logradouro', '')[:50]}</Logradouro>
-                <NumeroEndereco>{end.get('numero', '')[:10]}</NumeroEndereco>
-                <ComplementoEndereco>{end.get('complemento', '')[:30]}</ComplementoEndereco>
-                <Bairro>{end.get('bairro', '')[:30]}</Bairro>
-                <Cidade>{end.get('cidade', '')}</Cidade>
-                <UF>{end.get('uf', '')}</UF>
+                <Logradouro>{escape_xml(end.get('logradouro', ''))[:50]}</Logradouro>
+                <NumeroEndereco>{escape_xml(end.get('numero', ''))[:10]}</NumeroEndereco>
+                <ComplementoEndereco>{escape_xml(end.get('complemento', ''))[:30]}</ComplementoEndereco>
+                <Bairro>{escape_xml(end.get('bairro', ''))[:30]}</Bairro>
+                <Cidade>{limpa_documento(end.get('city', end.get('cidade', '')))}</Cidade>
+                <UF>{escape_xml(end.get('uf', ''))[:2].upper()}</UF>
                 <CEP>{limpa_documento(end.get('cep', ''))}</CEP>
             </EnderecoTomador>
             """
             
     if nota.get('email_tomador'):
-        xml_template += f"<EmailTomador>{nota['email_tomador'][:75]}</EmailTomador>\n"
+        xml_template += f"<EmailTomador>{escape_xml(nota['email_tomador'])[:75]}</EmailTomador>\n"
         
-    xml_template += f"""<Discriminacao>{texto_disc[:2000]}</Discriminacao>
+    xml_template += f"""<Discriminacao>{escape_xml(texto_disc)[:2000]}</Discriminacao>
         </RPS>
     </PedidoEnvioLoteRPS>"""
     

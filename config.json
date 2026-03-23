@@ -4,9 +4,9 @@
   "cnpj_prestador": "MEUCNPJ",
   "inscricao_municipal": "Minhainscricao",
   "codigo_servico": "Meucodigo",
-  "aliquota_servicos": 0.02,
+  "aliquota_servicos": 0.0,
   "tributacao_rps": "T",
-  "serie_rps": "XY",
+  "serie_rps": "A",
   "retencoes_federais": {
     "ir": 1.5,
     "pis": 0.65,

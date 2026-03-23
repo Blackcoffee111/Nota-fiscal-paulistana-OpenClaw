@@ -22,15 +22,41 @@ Esta documentação define o comportamento e as arquiteturas da Skill de faturam
 
 ## ✨ 0. O Wizard de Instalação (Health Check Automático)
 Sempre que o usuário solicitar qualquer ação financeira pela primeira vez (ou se você notar que há algo faltando), você **deve** fazer um check-up silencioso lendo o arquivo `config.json`.
-Se os campos contiverem palavras-chave genéricas como `"MEUCNPJ"`, `"Minhainscricao"` ou `"MEUCertificado.p12"`, significa que o usuário acabou de instalar sua Skill e é um humano leigo. 
+Se os campos contiverem palavras-chave genéricas como `"MEUCNPJ"`, `"Minhainscricao"`, `"MEUCertificado.p12"` ou o valor **`0.0`** no campo `aliquota_servicos`, significa que o usuário acabou de instalar sua Skill e é um humano leigo. 
 
 Neste caso, pause a tarefa dele e inicie um **Wizard de Instalação Interativo e Amigável** no chat:
-1. Diga que percebeu que é a primeira vez dele e peça, um por vez, os dados faltantes: O CNPJ, a Inscrição Municipal, e o Código de Serviço.
-2. A cada resposta do usuário, você **mesmo (o Agente)** usará suas habilidades de escrita de arquivo para alterar e salvar os dados no documento `config.json` por ele.
-3. **Ato Autônomo com o .env:** Antes de falar com o usuário sobre a senha, use suas próprias ferramentas de terminal para copiar (ou renomear) o arquivo modelo `.env.example` para `.env` na pasta. Deixe este arquivo preparado para receber a senha.
-4. Quando tudo isso acabar e o `.env` oculto estiver pronto, informe-o sobre a etapa final de segurança (A Senha e o Certificado) orientando-o exatamente desta forma:
+0. **Check de Dependências (Obrigatório):** Antes de tudo, rode no terminal `pip install -r requirements.txt` para garantir que as bibliotecas `requests`, `lxml`, `signxml`, `cryptography` e `python-dotenv` estejam presentes. **Não tente emitir sem garantir o sucesso desta instalação.**
+1. Diga que percebeu que é a primeira vez dele e peça, um por vez, os dados faltantes: O CNPJ, a Inscrição Municipal, o Código de Serviço e a **Alíquota de Serviços (ISS)**.
+
+> [!IMPORTANT]
+> **BLOQUEIO DE SEGURANÇA NA ALÍQUOTA:**
+> Você deve obrigatoriamente aguardar a resposta do usuário sobre a alíquota. 
+> * **Proibido Avançar:** Não use o valor padrão de 2% (0.02) por conta própria caso o arquivo contenha 0.0 ou 0.
+> * **Ação Necessária:** Pergunte: *"Qual a alíquota de imposto municipal (ISS) para o seu código de serviço? Posso ajudá-lo a descobrir se não souber."*
+> * **Ajuda Ativa:** Se ele não souber, use sua habilidade de pesquisa (Google) cruzando o Código de Serviço dele com as alíquotas de São Paulo e sugira: *"Encontrei que para o serviço X a alíquota em SP costuma ser Y%. Confirma este valor?"*
+> * **Condição de Saída:** Você só pode seguir para o faturamento ou para o próximo passo se o usuário digitar um número ou disser "Sim/Confirmo" para sua sugestão.
+3. A cada resposta do usuário, você **mesmo (o Agente)** usará suas habilidades de escrita de arquivo para alterar e salvar os dados no documento `config.json` por ele.
+4. **Ato Autônomo com o .env:** Antes de falar com o usuário sobre a senha, use suas próprias ferramentas de terminal para copiar (ou renomear) o arquivo modelo visível `env.example` para `.env` (oculto com ponto) na pasta. Deixe este arquivo preparado para receber a senha.
+5. **Privacidade Rigorosa do .env:** Por razões de segurança e proteção de senhas bancárias, você (o Agente) **JAMAIS** deve ler o conteúdo do arquivo `.env` para conferir se o usuário já preencheu a senha. 
+   - Sempre parta do princípio de que a senha foi inserida conforme orientado. 
+   - Comunique ao usuário explicitamente: *"Por sua segurança, eu não tenho permissão para ler seu arquivo .env e ver sua senha. Vou acreditar que você já a inseriu e seguiremos com o teste!"*
+6. Quando tudo isso acabar e o `.env` oculto estiver pronto, informe-o sobre a etapa final de segurança (A Senha e o Certificado) orientando-o exatamente desta forma:
 > *"Pronto, preenchi os dados da sua empresa e preparei o terreno! Agora, por questões rigorosas de segurança bancária e proteção de dados, vou pedir que você faça a última etapa manualmente. Abra a pasta técnica deste projeto no seu computador (geralmente em `~/.openclaw/workspace/skills/`). Arraste para lá o seu arquivo de certificado real (ex: `Certificado.p12`). Em seguida, por ser uma senha sigilosa, peço que você abra o arquivo de texto oculto chamado `.env` (se vc usa Mac, aperte `Command + Shift + .` para ver os arquivos ocultos). Lá dentro, você verá escrito `NFSE_CERT_PASSWORD=SUA_SENHA_AQUI_NAO_COLOQUE_NO_GITHUB`. Apague tudo o que está do lado direito do sinal de igual, e cole a senha verdadeira do seu certificado colada ao `=`. Feche e salve. Me avise no chat quando terminar!"*
-5. Após o usuário confirmar que fez as cópias, atualize no `config.json` o nome exato do arquivo `.p12` que ele disse ter copiado para a pasta, e finalmente retome ou execute a tarefa inicial que ele havia pedido!
+7. Após o usuário confirmar que fez as cópias, atualize no `config.json` o nome exato do arquivo `.p12` que ele disse ter copiado para a pasta, e agora, você deve prosseguir para o **Passo Final de Validação Técnica**.
+
+8. **"Batismo de Fogo" (Teste de Emissão Obrigatório):** Antes de considerar a instalação concluída, você **DEVE** realizar um faturamento de teste para validar a assinatura digital e a conexão com a prefeitura.
+   - **Ação Autônoma:** Gere silenciosamente o arquivo `/tmp/test_instalacao.json` com os seguintes dados:
+     * `valor_servicos`: 150.00
+     * `indicador_tomador`: 2 (CNPJ)
+     * `documento_tomador`: "00000000000191"
+     * `razao_social_tomador`: "CLIENTE TESTE - OPENCLAW"
+     * `iss_retido`: "N"
+     * `discriminacao`: "Teste técnico de integração e assinatura digital - OpenClaw"
+   - **Execução:** Rode obrigatoriamente: `python3 emitir_nfse.py --modo teste --dados /tmp/test_instalacao.json --json-out`
+   - **Conclusão:** 
+     * Se o retorno for `Sucesso: True`, parabenize o usuário: *"Parabéns! Sua instalação foi validada com sucesso em modo teste. Agora você já pode emitir notas reais!"*
+     * Se der erro, analise o código de erro retornado pela Prefeitura e ajude o usuário a corrigir os dados (ex: se o erro for 1056/1057, cheque a Inscrição Municipal ou a Senha). 
+     * **NUNCA** incremente o `contador_rps.txt` após um teste, seja bem ou mal sucedido
 
 ---
 
@@ -78,7 +104,7 @@ Modelo:
   "iss_retido": "N",
   "calcular_retencoes": true,
   "valor_servicos": 150.00,
-  "indicador_tomador": 2, // 2 para CNPJ, 1 para CPF
+  "indicador_tomador": 2, // 2 para CNPJ, 1 para CPF, 3 para Sem Identificação
   "documento_tomador": "<Apenas_Numeros>",
   "razao_social_tomador": "<Nome_Empresa>",
   "email_tomador": "<Email_Cliente>",
