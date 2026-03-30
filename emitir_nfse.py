@@ -323,10 +323,7 @@ def construir_xml_lote(config, nota, assinatura_rps):
             <CodigoServico>{limpa_documento(config['codigo_servico'])}</CodigoServico>
             <AliquotaServicos>{Decimal(str(config['aliquota_servicos'])):.2f}</AliquotaServicos>
             <ISSRetido>{'true' if str(nota['iss_retido']).upper() == 'S' else 'false'}</ISSRetido>
-            <CPFCNPJTomador>
-                <{'CNPJ' if int(nota['indicador_tomador']) == 2 else 'CPF'}>{limpa_documento(nota.get('documento_tomador', ''))}</{'CNPJ' if int(nota['indicador_tomador']) == 2 else 'CPF'}>
-            </CPFCNPJTomador>
-            <RazaoSocialTomador>{escape_xml(nota.get('razao_social_tomador', ''))[:75]}</RazaoSocialTomador>
+            {f'''<CPFCNPJTomador>\n                <{"CNPJ" if int(nota["indicador_tomador"]) == 2 else "CPF"}>{limpa_documento(nota.get("documento_tomador", ""))}</{"CNPJ" if int(nota["indicador_tomador"]) == 2 else "CPF"}>\n            </CPFCNPJTomador>\n''' if int(nota['indicador_tomador']) != 3 else ''}            {f"<RazaoSocialTomador>{escape_xml(nota.get('razao_social_tomador', ''))[:75]}</RazaoSocialTomador>" if nota.get('razao_social_tomador') else "<RazaoSocialTomador/>"}
             """
             
     # Adicionar endereço tomador se existir
