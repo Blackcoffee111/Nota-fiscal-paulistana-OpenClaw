@@ -287,12 +287,12 @@ def construir_xml_lote(config, nota, assinatura_rps):
             itens_retencao.append(f"CSLL {str(retencoes['csll']).replace('.', ',')}%: R$ {formata_valor(v_csll)}")
 
     texto_disc = str(nota.get('discriminacao', '')).strip()
-    if itens_retencao:
+    if itens_retencao and "Retenções Federais" not in texto_disc:
         texto_disc += " | Retenções Federais: " + " / ".join(itens_retencao)
     
-    msg_padrao = config.get('mensagem_padrao', '')
-    if msg_padrao:
-        texto_disc += f" | {msg_padrao.strip()}"
+    msg_padrao = config.get('mensagem_padrao', '').strip()
+    if msg_padrao and msg_padrao not in texto_disc:
+        texto_disc += f" | {msg_padrao}"
         
     texto_disc = texto_disc.strip(' |')
 
