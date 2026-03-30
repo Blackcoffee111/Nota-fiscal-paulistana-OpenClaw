@@ -7,7 +7,6 @@ import argparse
 import tempfile
 import requests
 import base64
-import html
 from xml.dom.minidom import parseString
 from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
@@ -54,13 +53,6 @@ def formata_valor(valor):
     return f"{Decimal(str(valor)):.2f}"
 
 
-def escape_xml(text):
-    """Escapa caracteres especiais para XML."""
-    if not text:
-        return ""
-    return html.escape(str(text))
-
-
 def limpa_documento(doc):
     """Remove caracteres não numéricos."""
     return re.sub(r'[^0-9]', '', str(doc))
@@ -75,29 +67,42 @@ def gerar_assinatura_rps(config, nota):
     v_deducoes = int(Decimal(str(nota.get('valor_deducoes', 0))) * 100)
     
     # Campo 1: 8 posicoes, zeros a esquerda
-    inscricao_prestador = limpa_documento(config['inscricao_municipal']).zfill(8)
-    # Campo 2: 5 posicoes, espacos a direita (removendo pontos e espacos extras)
-    serie = str(config['serie_rps']).strip().upper()[:5].ljust(5)
+    inscricao_prestador = str(config['inscricao_municipal']).zfill(8)
+    # Campo 2: 5 posicoes, espacos a direita
+    serie = str(config['serie_rps']).ljust(5)
     # Campo 3: 12 posicoes, zeros a esquerda
-    numero = limpa_documento(nota['numero_rps']).zfill(12)
+    numero = str(nota['numero_rps']).zfill(12)
     # Campo 4: 8 posicoes, AAAAMMDD
     data = str(nota['data_emissao']).replace('-', '')[:8]
     # Campo 5: 1 posicao (na v1, TributacaoRPS tem 1 caractere, nao 2!)
-    tributacao = str(config['tributacao_rps']).strip().upper()[:1].ljust(1)
+    tributacao = str(config['tributacao_rps']).ljust(1)
     # Campo 6: 1 posicao
-    status = str(nota['status_rps']).strip().upper()[:1]
+    status = str(nota['status_rps'])
     # Campo 7: 1 posicao ('S' ou 'N')
-    iss_retido = str(nota['iss_retido']).strip().upper()[:1]
+    iss_retido = str(nota['iss_retido'])
     # Campo 8: 15 posicoes, zeros a esquerda
     vr_servico = str(v_servicos).zfill(15)
     # Campo 9: 15 posicoes, zeros a esquerda
     vr_deducao = str(v_deducoes).zfill(15)
     # Campo 10: 5 posicoes, zeros a esquerda
-    codigo_servico = limpa_documento(config['codigo_servico']).zfill(5)
+    codigo_servico = str(config['codigo_servico']).zfill(5)
     # Campo 11: 1 posicao
-    ind_tomador = str(nota['indicador_tomador']).strip()[:1]
-    # Campo 12: 14 posicoes, zeros a esquerda (IMPORTANTE: Se for 3, o documento deve ser zero-filled)
+    ind_tomador = str(nota['indicador_tomador'])
+    # Campo 12: 14 posicoes, zeros a esquerda
     doc_tomador = limpa_documento(nota.get('documento_tomador', '')).zfill(14)
+
+    # Campo 13 (opcional): Intermediário — CNPJ/CPF zerado em 14 pos + ISS retido ('S'/'N')
+    # Conforme código ACBr (ISSSaoPaulo.txt L202): LIndInter + Poem_Zeros(CNPJ, 14) + ISSRetidoInter
+    # O Erro 1206 da Prefeitura confirma o formato exigido na string de assinatura.
+    inter = nota.get('intermediario', {})
+    cnpj_inter_raw = limpa_documento(inter.get('cnpj', ''))
+    if cnpj_inter_raw:
+        ind_inter = '2' if len(cnpj_inter_raw) == 14 else '1'
+        doc_inter = cnpj_inter_raw.zfill(14)
+        iss_inter_sig = 'S' if inter.get('iss_retido', False) else 'N'
+        campo_inter = ind_inter + doc_inter + iss_inter_sig
+    else:
+        campo_inter = ''
 
     string_rps = (
         inscricao_prestador +
@@ -111,10 +116,11 @@ def gerar_assinatura_rps(config, nota):
         vr_deducao +
         codigo_servico +
         ind_tomador +
-        doc_tomador
+        doc_tomador +
+        campo_inter
     )
     
-    # Para debug de Erro 1057: mostrar a string (oculta em producao normal, mas util aqui)
+    # Para debug de Erro 1057/1206: mostrar a string
     log(f"    (debug) RPS String   : '{string_rps}' (len: {len(string_rps)})")
     
     # É crucial gerar do certificado P12 recarrega-lo e assinar
@@ -293,7 +299,7 @@ def construir_xml_lote(config, nota, assinatura_rps):
     xml_template = f"""<PedidoEnvioLoteRPS xmlns="http://www.prefeitura.sp.gov.br/nfe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
         <Cabecalho xmlns="" Versao="1">
             <CPFCNPJRemetente>
-                <CNPJ>{limpa_documento(config['cnpj_prestador'])}</CNPJ>
+                <CNPJ>{config['cnpj_prestador']}</CNPJ>
             </CPFCNPJRemetente>
             <transacao>false</transacao>
             <dtInicio>{nota['data_emissao']}</dtInicio>
@@ -305,14 +311,14 @@ def construir_xml_lote(config, nota, assinatura_rps):
         <RPS xmlns="">
             <Assinatura>{assinatura_rps}</Assinatura>
             <ChaveRPS>
-                <InscricaoPrestador>{limpa_documento(config['inscricao_municipal'])}</InscricaoPrestador>
-                <SerieRPS>{str(config['serie_rps']).strip().upper()[:5]}</SerieRPS>
-                <NumeroRPS>{limpa_documento(nota['numero_rps'])}</NumeroRPS>
+                <InscricaoPrestador>{config['inscricao_municipal']}</InscricaoPrestador>
+                <SerieRPS>{config['serie_rps']}</SerieRPS>
+                <NumeroRPS>{nota['numero_rps']}</NumeroRPS>
             </ChaveRPS>
             <TipoRPS>RPS</TipoRPS>
             <DataEmissao>{nota['data_emissao']}</DataEmissao>
-            <StatusRPS>{str(nota['status_rps']).strip().upper()[:1]}</StatusRPS>
-            <TributacaoRPS>{str(config['tributacao_rps']).strip().upper()[:1]}</TributacaoRPS>
+            <StatusRPS>{nota['status_rps']}</StatusRPS>
+            <TributacaoRPS>{config['tributacao_rps']}</TributacaoRPS>
             <ValorServicos>{formata_valor(nota['valor_servicos'])}</ValorServicos>
             <ValorDeducoes>{formata_valor(nota.get('valor_deducoes', 0))}</ValorDeducoes>
             {f"<ValorPIS>{formata_valor(v_pis)}</ValorPIS>" if v_pis > 0 else ""}
@@ -320,10 +326,10 @@ def construir_xml_lote(config, nota, assinatura_rps):
             {f"<ValorINSS>{formata_valor(v_inss)}</ValorINSS>" if v_inss > 0 else ""}
             {f"<ValorIR>{formata_valor(v_ir)}</ValorIR>" if v_ir > 0 else ""}
             {f"<ValorCSLL>{formata_valor(v_csll)}</ValorCSLL>" if v_csll > 0 else ""}
-            <CodigoServico>{limpa_documento(config['codigo_servico'])}</CodigoServico>
-            <AliquotaServicos>{Decimal(str(config['aliquota_servicos'])):.2f}</AliquotaServicos>
-            <ISSRetido>{'true' if str(nota['iss_retido']).upper() == 'S' else 'false'}</ISSRetido>
-            {f'''<CPFCNPJTomador>\n                <{"CNPJ" if int(nota["indicador_tomador"]) == 2 else "CPF"}>{limpa_documento(nota.get("documento_tomador", ""))}</{"CNPJ" if int(nota["indicador_tomador"]) == 2 else "CPF"}>\n            </CPFCNPJTomador>\n''' if int(nota['indicador_tomador']) != 3 else ''}            {f"<RazaoSocialTomador>{escape_xml(nota.get('razao_social_tomador', ''))[:75]}</RazaoSocialTomador>" if nota.get('razao_social_tomador') else "<RazaoSocialTomador/>"}
+            <CodigoServico>{config['codigo_servico']}</CodigoServico>
+            <AliquotaServicos>{config['aliquota_servicos']}</AliquotaServicos>
+            <ISSRetido>{'true' if nota['iss_retido'] == 'S' else 'false'}</ISSRetido>
+            {f'''<CPFCNPJTomador>\n                <{"CNPJ" if nota["indicador_tomador"] == 2 else "CPF"}>{limpa_documento(nota.get("documento_tomador", ""))}</{"CNPJ" if nota["indicador_tomador"] == 2 else "CPF"}>\n            </CPFCNPJTomador>\n''' if nota['indicador_tomador'] != 3 else ''}            {f"<RazaoSocialTomador>{nota.get('razao_social_tomador', '')[:75]}</RazaoSocialTomador>" if nota.get('razao_social_tomador') else "<RazaoSocialTomador/>"}
             """
             
     # Adicionar endereço tomador se existir
@@ -331,23 +337,44 @@ def construir_xml_lote(config, nota, assinatura_rps):
     if end:
         xml_template += f"""<EnderecoTomador>
                 <TipoLogradouro></TipoLogradouro>
-                <Logradouro>{escape_xml(end.get('logradouro', ''))[:50]}</Logradouro>
-                <NumeroEndereco>{escape_xml(end.get('numero', ''))[:10]}</NumeroEndereco>
-                <ComplementoEndereco>{escape_xml(end.get('complemento', ''))[:30]}</ComplementoEndereco>
-                <Bairro>{escape_xml(end.get('bairro', ''))[:30]}</Bairro>
-                <Cidade>{limpa_documento(end.get('city', end.get('cidade', '')))}</Cidade>
-                <UF>{escape_xml(end.get('uf', ''))[:2].upper()}</UF>
+                <Logradouro>{end.get('logradouro', '')[:50]}</Logradouro>
+                <NumeroEndereco>{end.get('numero', '')[:10]}</NumeroEndereco>
+                <ComplementoEndereco>{end.get('complemento', '')[:30]}</ComplementoEndereco>
+                <Bairro>{end.get('bairro', '')[:30]}</Bairro>
+                <Cidade>{end.get('cidade', '')}</Cidade>
+                <UF>{end.get('uf', '')}</UF>
                 <CEP>{limpa_documento(end.get('cep', ''))}</CEP>
             </EnderecoTomador>
             """
             
     if nota.get('email_tomador'):
-        xml_template += f"<EmailTomador>{escape_xml(nota['email_tomador'])[:75]}</EmailTomador>\n"
-        
-    xml_template += f"""<Discriminacao>{escape_xml(texto_disc)[:2000]}</Discriminacao>
-        </RPS>
+        xml_template += f"<EmailTomador>{nota['email_tomador'][:75]}</EmailTomador>\n"
+
+    # Bloco opcional do Intermediário de Serviço
+    # Conforme TiposNFe_v01.xsd (ACBr/Prefeitura SP), a ordem correta dentro do RPS é:
+    # EmailTomador → CPFCNPJIntermediario → InscricaoMunicipalIntermediario →
+    # ISSRetidoIntermediario → EmailIntermediario → Discriminacao → (campos de obra) → ...
+    # O bloco do intermediário vem ANTES de Discriminacao.
+    intermediario = nota.get('intermediario', {})
+    cnpj_inter = limpa_documento(intermediario.get('cnpj', ''))
+    if cnpj_inter:
+        tipo_doc_inter = 'CNPJ' if len(cnpj_inter) == 14 else 'CPF'
+        xml_template += (
+            f"<CPFCNPJIntermediario>"
+            f"<{tipo_doc_inter}>{cnpj_inter}</{tipo_doc_inter}>"
+            f"</CPFCNPJIntermediario>\n"
+        )
+        insc_mun_inter = str(intermediario.get('inscricao_municipal', '')).strip()
+        if insc_mun_inter:
+            xml_template += f"<InscricaoMunicipalIntermediario>{insc_mun_inter}</InscricaoMunicipalIntermediario>\n"
+        iss_inter = 'true' if intermediario.get('iss_retido', False) else 'false'
+        xml_template += f"<ISSRetidoIntermediario>{iss_inter}</ISSRetidoIntermediario>\n"
+
+    xml_template += f"<Discriminacao>{texto_disc[:2000]}</Discriminacao>\n"
+
+    xml_template += """        </RPS>
     </PedidoEnvioLoteRPS>"""
-    
+
     # Remove whitespace/tabs extra for proper C14N digest (though C14N normalizes, it's cleaner)
     return re.sub(r'>\s+<', '><', xml_template.strip())
 
@@ -369,9 +396,12 @@ def assinar_lote(xml_str, chave_pem, cert_pem):
     return xml.replace('\n', '').replace('\r', '')
 
 
-def emitir_nota(config_file, dados_file, modo):
+def emitir_nota(config_file, dados_file, modo, dry_run=False):
     log("=" * 60)
-    log(f"  NFS-e São Paulo - Emissão (Modo: {modo.upper()})")
+    if dry_run:
+        log(f"  NFS-e São Paulo - DRY RUN (sem envio) | Modo: {modo.upper()}")
+    else:
+        log(f"  NFS-e São Paulo - Emissão (Modo: {modo.upper()})")
     log("=" * 60)
 
     config = carrega_config(config_file)
@@ -406,7 +436,25 @@ def emitir_nota(config_file, dados_file, modo):
 
     log("[4/5] Assinando digitalmente (XMLDSig)...")
     xml_assinado = assinar_lote(xml_nao_assinado, chave_pem, cert_pem)
-    
+
+    # --- DRY RUN: imprime o XML e encerra sem enviar ---
+    if dry_run:
+        log("\n" + "=" * 60)
+        log("  DRY RUN — XML montado e assinado (não enviado):")
+        log("=" * 60)
+        try:
+            pretty = parseString(xml_assinado).toprettyxml(indent='  ')
+            # Remove a linha do XML declaration duplicada que toprettyxml adiciona
+            linhas = [l for l in pretty.splitlines() if l.strip() and not l.strip().startswith('<?xml')]
+            print('\n'.join(linhas))
+        except Exception:
+            print(xml_assinado)
+        log("\n" + "=" * 60)
+        log("  DRY RUN concluído. Nenhum dado foi enviado à Prefeitura.")
+        log("=" * 60)
+        return {"sucesso": True, "dry_run": True, "mensagem": "XML gerado localmente, nenhuma nota emitida."}
+    # ---------------------------------------------------
+
     # Faz escape do XML interno para ser inserido no campo `MensagemXML` (que é string)
     xml_escapado = (xml_assinado
                     .replace('&', '&amp;')
@@ -479,15 +527,17 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="config.json", help="Arquivo de configuracao")
     parser.add_argument("--dados", default="dados_nota.json", help="Arquivo com os dados do RPS/Nota")
     parser.add_argument("--json-out", action="store_true", help="Retorna apenas a saida JSON")
-    
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Monta e assina o XML localmente mas NÃO envia à Prefeitura (útil para testes)")
+
     args = parser.parse_args()
-    
+
     if args.json_out:
         IS_JSON_OUT = True
         import warnings
         warnings.filterwarnings('ignore')
-        
-    resultado = emitir_nota(args.config, args.dados, args.modo)
-    
+
+    resultado = emitir_nota(args.config, args.dados, args.modo, dry_run=args.dry_run)
+
     if args.json_out and resultado:
         print(json.dumps(resultado, indent=2, ensure_ascii=False))
