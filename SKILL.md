@@ -95,6 +95,16 @@ Use o script `baixar_notas.py` que consulta a Prefeitura e produz um extrato aut
 
 ## 📄 3. Geração do Payload JSON Único para Emissão
 Para o Passo 5 acima, gere um `/tmp/dados_rps_XXX.json` unicamente para o atendimento.
+
+> [!IMPORTANT]
+> **SANITIZAÇÃO OBRIGATÓRIA ANTES DE MONTAR O JSON (Erro "assinatura difere do calculado"):**
+> A Prefeitura de São Paulo valida a assinatura digital comparando o XML recebido com um digest calculado internamente. Acentos e quebras de linha nos campos de texto fazem essa comparação falhar, gerando o erro de assinatura. **Antes de escrever qualquer campo de texto no JSON**, aplique obrigatoriamente as duas regras abaixo:
+>
+> 1. **Remover acentos e caracteres especiais:** Converta todos os caracteres acentuados para sua versão sem acento nos campos `razao_social_tomador`, `discriminacao`, e em todos os campos de endereço (`logradouro`, `complemento`, `bairro`).
+>    - Exemplos: `á→a`, `é→e`, `í→i`, `ó→o`, `ú→u`, `â→a`, `ê→e`, `ô→o`, `ã→a`, `õ→o`, `ç→c`, `Á→A`, `É→E`, `Í→I`, `Ó→O`, `Ú→U`, `Â→A`, `Ê→E`, `Ô→O`, `Ã→A`, `Õ→O`, `Ç→C`.
+>
+> 2. **Remover quebras de linha:** No campo `discriminacao`, substitua qualquer `\n`, `\r` ou `\r\n` por um espaço simples (` `). Textos com múltiplas linhas devem virar uma única linha contínua.
+
 Modelo:
 ```json
 {
