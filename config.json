@@ -18,5 +18,25 @@
     "irrf": 10.0,
     "csrf": 10.0
   },
-  "mensagem_padrao": ""
+  "mensagem_padrao": "",
+  "ibscbs": {
+    "habilitado": false,
+    "_comentario": "Mude habilitado=true para emitir no layout v2 (RTC). Em 2026 os valores são apenas informativos — recolhimento dispensado pela LC 214/2025 art. 343-348.",
+    "fin_nfse": 0,
+    "ind_final": 0,
+    "c_ind_op": "111111",
+    "ind_dest": 0,
+    "cst": "000",
+    "cclasstrib": "000001",
+    "ccredpres": null,
+    "aliquota_cbs": 0.009,
+    "aliquota_ibs_uf": 0.001,
+    "aliquota_ibs_mun": 0.000,
+    "_referencias": {
+      "cst_doc": "Tabela CST IBS/CBS — Informe Técnico RT 2025.002 v1.10",
+      "cclasstrib_doc": "Tabela cClassTrib — Informe Técnico RT 2025.002 v1.10",
+      "c_ind_op_doc": "AnexoVII-IndOp_IBSCBS_V1.00.00.xlsx (art. 11 LC 214/2025)",
+      "aliquotas_2026": "CBS 0,9% / IBS 0,1% (alíquotas-teste — fase informativa)"
+    }
+  }
 }
