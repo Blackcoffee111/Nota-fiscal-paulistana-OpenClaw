@@ -226,65 +226,134 @@ def processar_resposta(xml_resposta):
         log(f"❌ Ocorreu um erro ao processar a resposta: {e}")
         return {"sucesso": False, "erros": [{"codigo": "EXC", "descricao": str(e)}]}
 
+def calcular_tipo_retencao(pis_retido, cofins_retido, csll_retido):
+    """Retorna o código de TipoRetencao conforme tabela SP 2026.
+
+    Códigos:
+      0 - PIS/COFINS/CSLL Não Retidos
+      3 - PIS/COFINS/CSLL Retidos
+      4 - PIS/COFINS Retidos, CSLL Não Retido
+      5 - PIS Retido, COFINS/CSLL Não Retidos
+      6 - COFINS Retido, PIS/CSLL Não Retidos
+      7 - PIS Não Retido, COFINS/CSLL Retidos
+      8 - PIS/COFINS Não Retidos, CSLL Retido
+      9 - COFINS Não Retido, PIS/CSLL Retidos
+    """
+    p, c, s = bool(pis_retido), bool(cofins_retido), bool(csll_retido)
+    if not p and not c and not s:
+        return 0
+    if p and c and s:
+        return 3
+    if p and c and not s:
+        return 4
+    if p and not c and not s:
+        return 5
+    if not p and c and not s:
+        return 6
+    if not p and c and s:
+        return 7
+    if not p and not c and s:
+        return 8
+    if p and not c and s:
+        return 9
+    return 0
+
+
 def construir_xml_lote(config, nota, assinatura_rps):
     """
     Constrói o XML `<PedidoEnvioLoteRPS>` e seus elementos internos.
+
+    A partir de 2026 (config.pcc_2026.habilitado=true), aplica as novas regras
+    da Prefeitura SP para PIS/COFINS/CSLL:
+      - ValorPIS e ValorCOFINS passam a ser DÉBITOS PRÓPRIOS (sempre preenchidos)
+      - ValorCSLL passa a ser a SOMA das retenções PIS+COFINS+CSLL (PCC/CRF)
+      - Novo campo TipoRetencao identifica o tipo de retenção (0, 3-9)
+    Quando pcc_2026.habilitado=false, mantém comportamento legado (v1).
     """
     # Lógica de cálculo de Retenções
     calcular = nota.get('calcular_retencoes', False)
     retencoes = config.get('retencoes_federais', {})
     limites = config.get('limites_retencao', {'irrf': 10.0, 'csrf': 10.0})
-    
+    pcc_2026 = config.get('pcc_2026', {})
+    usar_pcc_2026 = pcc_2026.get('habilitado', False)
+
     val_servicos = Decimal(str(nota['valor_servicos']))
-    v_pis = Decimal('0.00')
-    v_cofins = Decimal('0.00')
+
+    # --- Débitos próprios (PCC 2026) — independem de retenção ---
+    debito_cfg = pcc_2026.get('debito_proprio', {})
+    aliq_pis_debito = Decimal(str(debito_cfg.get('pis', retencoes.get('pis', 0))))
+    aliq_cofins_debito = Decimal(str(debito_cfg.get('cofins', retencoes.get('cofins', 0))))
+    v_pis_debito = (val_servicos * aliq_pis_debito / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    v_cofins_debito = (val_servicos * aliq_cofins_debito / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    # --- Retenções (legado) — calculadas independente do PCC 2026 ---
+    v_pis_retido = Decimal('0.00')
+    v_cofins_retido = Decimal('0.00')
     v_inss = Decimal('0.00')
     v_ir = Decimal('0.00')
-    v_csll = Decimal('0.00')
+    v_csll_retido = Decimal('0.00')
 
-    texto_retencoes = ""
     itens_retencao = []
-    
+
     if calcular and retencoes:
-        # Calcular valores brutos primeiro
         if retencoes.get('pis', 0) > 0:
-            v_pis = (val_servicos * Decimal(str(retencoes['pis'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            v_pis_retido = (val_servicos * Decimal(str(retencoes['pis'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         if retencoes.get('cofins', 0) > 0:
-            v_cofins = (val_servicos * Decimal(str(retencoes['cofins'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            v_cofins_retido = (val_servicos * Decimal(str(retencoes['cofins'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         if retencoes.get('inss', 0) > 0:
             v_inss = (val_servicos * Decimal(str(retencoes['inss'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         if retencoes.get('ir', 0) > 0:
             v_ir = (val_servicos * Decimal(str(retencoes['ir'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         if retencoes.get('csll', 0) > 0:
-            v_csll = (val_servicos * Decimal(str(retencoes['csll'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            v_csll_retido = (val_servicos * Decimal(str(retencoes['csll'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-        # Tratar limiares configuráveis (Art. 31 Lei 10.833 e alterações, DARF mínimo IR)
+        # Tratar limiares (Art. 31 Lei 10.833 e alterações, DARF mínimo IR)
         limite_csrf = Decimal(str(limites.get('csrf', 10.0)))
         limite_irrf = Decimal(str(limites.get('irrf', 10.0)))
-        
-        # O IRRF é dispensado se o valor do IR for <= ao limite (geralmente R$ 10,00)
+
         if v_ir <= limite_irrf:
             v_ir = Decimal('0.00')
-            
-        # A CSRF (PIS, COFINS, CSLL) só é retida se a soma das contribuições for > ao limite (geralmente R$ 10,00)
-        soma_csrf = v_pis + v_cofins + v_csll
-        if soma_csrf <= limite_csrf:
-            v_pis = Decimal('0.00')
-            v_cofins = Decimal('0.00')
-            v_csll = Decimal('0.00')
 
-        # Montar os textos baseados nos novos valores validados
-        if v_pis > 0:
-            itens_retencao.append(f"PIS {str(retencoes['pis']).replace('.', ',')}%: R$ {formata_valor(v_pis)}")
-        if v_cofins > 0:
-            itens_retencao.append(f"COFINS {str(retencoes['cofins']).replace('.', ',')}%: R$ {formata_valor(v_cofins)}")
+        soma_csrf = v_pis_retido + v_cofins_retido + v_csll_retido
+        if soma_csrf <= limite_csrf:
+            v_pis_retido = Decimal('0.00')
+            v_cofins_retido = Decimal('0.00')
+            v_csll_retido = Decimal('0.00')
+
+        # Textos para discriminação (mostra apenas o que foi RETIDO)
+        if v_pis_retido > 0:
+            itens_retencao.append(f"PIS {str(retencoes['pis']).replace('.', ',')}%: R$ {formata_valor(v_pis_retido)}")
+        if v_cofins_retido > 0:
+            itens_retencao.append(f"COFINS {str(retencoes['cofins']).replace('.', ',')}%: R$ {formata_valor(v_cofins_retido)}")
         if v_inss > 0:
-            # INSS tem regras próprias, mantemos como foi retido independentemente de CSRF e IR
             itens_retencao.append(f"INSS {str(retencoes['inss']).replace('.', ',')}%: R$ {formata_valor(v_inss)}")
         if v_ir > 0:
             itens_retencao.append(f"IRRF {str(retencoes['ir']).replace('.', ',')}%: R$ {formata_valor(v_ir)}")
-        if v_csll > 0:
-            itens_retencao.append(f"CSLL {str(retencoes['csll']).replace('.', ',')}%: R$ {formata_valor(v_csll)}")
+        if v_csll_retido > 0:
+            itens_retencao.append(f"CSLL {str(retencoes['csll']).replace('.', ',')}%: R$ {formata_valor(v_csll_retido)}")
+
+    # --- Decisão dos valores que vão no XML ---
+    if usar_pcc_2026:
+        # Layout SP 2026 (regra nova):
+        #   ValorPIS    = débito próprio (sempre)
+        #   ValorCOFINS = débito próprio (sempre)
+        #   ValorCSLL   = soma das retenções PCC (4,65% quando retido)
+        v_pis_xml = v_pis_debito
+        v_cofins_xml = v_cofins_debito
+        v_pcc_retido_total = v_pis_retido + v_cofins_retido + v_csll_retido
+        v_csll_xml = v_pcc_retido_total
+        tipo_retencao = calcular_tipo_retencao(v_pis_retido, v_cofins_retido, v_csll_retido)
+    else:
+        # Layout legado (v1): cada campo guarda só sua própria retenção
+        v_pis_xml = v_pis_retido
+        v_cofins_xml = v_cofins_retido
+        v_csll_xml = v_csll_retido
+        tipo_retencao = None  # campo não emitido
+
+    # Aliases para compatibilidade com o template f-string existente
+    v_pis = v_pis_xml
+    v_cofins = v_cofins_xml
+    v_csll = v_csll_xml
 
     texto_disc = str(nota.get('discriminacao', '')).strip()
     if itens_retencao and "Retenções Federais" not in texto_disc:
@@ -326,6 +395,7 @@ def construir_xml_lote(config, nota, assinatura_rps):
             {f"<ValorINSS>{formata_valor(v_inss)}</ValorINSS>" if v_inss > 0 else ""}
             {f"<ValorIR>{formata_valor(v_ir)}</ValorIR>" if v_ir > 0 else ""}
             {f"<ValorCSLL>{formata_valor(v_csll)}</ValorCSLL>" if v_csll > 0 else ""}
+            {f"<TipoRetencao>{tipo_retencao}</TipoRetencao>" if tipo_retencao is not None else ""}
             <CodigoServico>{config['codigo_servico']}</CodigoServico>
             <AliquotaServicos>{config['aliquota_servicos']}</AliquotaServicos>
             <ISSRetido>{'true' if nota['iss_retido'] == 'S' else 'false'}</ISSRetido>
