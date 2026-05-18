@@ -2,6 +2,8 @@
 description: Faturamento NFS-e SP (Emissão e Cancelamento de Notas Fiscais em São Paulo)
 ---
 
+<!-- Discriminação padrão: SERVIÇOS PRESTADOS PELOS PRÓPRIOS SÓCIOS NO EXERCÍCIO DE PROFISSÃO REGULAMENTADA POR LEGISLAÇÃO FEDERAL, ISENTO DA RETENÇÃO DO INSS CONFORME PREVISTO NO ART. 120, INCISO III, § 2º DA IN/RFB Nº 971/2009. -->
+
 # Habilidade de Faturamento NFS-e SP (OpenClaw)
 
 Esta documentação define o comportamento e as arquiteturas da Skill de faturamento para emitir e cancelar Notas Fiscais de Serviços Eletrônica (NFS-e) da Prefeitura de São Paulo.
@@ -11,12 +13,76 @@ Esta documentação define o comportamento e as arquiteturas da Skill de faturam
 ## 📁 Arquivos do Ecossistema
 1. `emitir_nfse.py` - Script de emissão em produção (gera o XML SOAP, encripta e envia).
 2. `cancelar_nfse.py` - Script de cancelamento de notas (criptografa o cancelamento).
-3. `config.json` - Retenções e alíquotas da clínica (ex: ISS, IRRF, limites, etc).
+3. `config.json` - Retenções e alíquotas da clínica (ex: ISS, IRRF, limites, bloco `pcc_2026`).
 4. `tomadores.json` - Tabela de dados de clientes recorrentes (sua agenda).
 5. `contador_rps.txt` - Arquivo de controle rigoroso para a sequência do talão.
 6. `Certificados.p12` - Chave criptográfica municipal (JAMAIS EXPOR).
 7. `.env` - Arquivo oculto onde você lerá a variável `NFSE_CERT_PASSWORD=senha`.
 8. `baixar_notas.py` - Script paginado de extração de relatórios e balanços contábeis da clínica.
+9. `SP_PCC_2026.md` - **Documentação detalhada** das mudanças PIS/COFINS/CSLL em vigor desde 01/2026 (branch `main`).
+10. `MIGRATION_RTC_2026.md`, `emitir_nfse_v2.py`, `NT_04_v2.pdf` - Arquivos do scaffold IBSCBS (Reforma Federal). **Vivem apenas na branch `rtc-2026-layout-v2`** — em standby até a Prefeitura SP publicar o endpoint do Layout 2. Se o usuário pedir algo relacionado, faça `git checkout rtc-2026-layout-v2 -- <arquivo>` para ler.
+
+---
+
+## 🗓️ Contexto Tributário 2026 (LEIA SEMPRE ANTES DE EMITIR)
+
+A partir de 2026, há **duas frentes de mudança** correndo em paralelo. Você precisa conhecê-las para responder corretamente ao usuário e calcular valores certos.
+
+### Frente 1 — PCC 2026 (Prefeitura SP) — ✅ **EM VIGOR E ATIVADA**
+
+Ajuste municipal de SP na semântica dos campos de tributos federais na NFS-e, em vigor desde **01/01/2026**. Está validada contra a homologação SP (resposta da prefeitura: `"sucesso": true` em 18/05/2026).
+
+**O que mudou** (já implementado no `emitir_nfse.py`):
+
+| Campo XML | Semântica antiga (até 2025) | Semântica nova (2026+) |
+|---|---|---|
+| `<ValorPIS>` | Valor RETIDO (só preenchia se houvesse retenção) | **DÉBITO PRÓPRIO** — sempre preenchido (Lucro Presumido: 0,65% × valor) |
+| `<ValorCOFINS>` | Valor RETIDO | **DÉBITO PRÓPRIO** — sempre preenchido (Lucro Presumido: 3% × valor) |
+| `<ValorCSLL>` | Valor RETIDO de CSLL apenas (1%) | **SOMA das retenções PCC** (PIS+COFINS+CSLL = 4,65%) quando houver retenção |
+| `<ValorIR>` | IRRF retido (1,5%) | Inalterado |
+| `<TipoRetencao>` | Não existia | **Anunciado mas ainda NÃO aceito pelo webservice** (mantido desabilitado via flag `pcc_2026.emitir_tipo_retencao=false`) |
+
+**Diferença conceitual que você deve saber explicar ao usuário:**
+- **Débito próprio** = imposto que o prestador apura mensalmente na DCTF/EFD-Contribuições e paga via DARF
+- **Retenção** = imposto descontado pelo tomador (cliente PJ) e pago em nome do prestador — vira crédito antecipado
+- A retenção da AMIL/operadoras (PCC 4,65%) **quita** o PIS/COFINS próprios do prestador automaticamente. CSLL trimestral pode sobrar diferença
+
+**Implicação no Esboço Financeiro (passo 3 da emissão):**
+- SEMPRE mostrar PIS e COFINS de débito próprio (mesmo sem retenção)
+- Quando houver retenção do tomador PJ (≥ R$ 666,67), mostrar a linha "Retenção PCC 4,65%: R$ X" consolidada
+- Líquido = valor bruto − retenção PCC (se houver) − IRRF (se aplicável)
+
+**Referências completas:** `SP_PCC_2026.md` na pasta da skill.
+
+### Frente 2 — RTC / IBSCBS (Reforma Federal) — ⏳ **AGUARDANDO ENDPOINT SP**
+
+Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025). Introduz CBS (substitui PIS/COFINS) e IBS (substitui ISS/ICMS), com grupo XML `<IBSCBS>`.
+
+**Status em 18/05/2026:**
+- Federal: NT 04 v1.1 publicada, alíquotas-teste CBS 0,9% / IBS 0,1% definidas
+- SP: webservice `lotenfe.asmx` ainda **não habilita** o grupo `<IBSCBS>` (retorna erro 1001)
+- **LC 214/2025 dispensa o recolhimento** de CBS/IBS em 2026 mesmo sem destaque na NF-e — não há urgência fiscal
+- Scaffold pronto em `emitir_nfse_v2.py` (branch experimental, não usar)
+
+**Cronograma futuro:**
+- 2026: ano-teste, valores informativos, sem recolhimento
+- 2027: CBS entra valendo, PIS/COFINS extintos
+- 2029-2032: transição gradual ISS → IBS
+- 2033: IBS pleno
+
+**Comportamento esperado do agente:** continuar emitindo no Layout v1 (com PCC 2026 ativo). Só migrar para v2 quando a Prefeitura SP publicar o endpoint oficial e o usuário pedir explicitamente.
+
+**Referências completas:** `MIGRATION_RTC_2026.md` na pasta da skill.
+
+### Resumo prático para o agente
+
+| Situação | Ação |
+|---|---|
+| Usuário pede emissão normal | Use `emitir_nfse.py` (já tem PCC 2026 ativo) |
+| Usuário pergunta sobre IBSCBS / Reforma Tributária | Explique que está em standby, dispensa de recolhimento em 2026 |
+| Usuário pergunta por que ValorPIS aparece sem retenção | Explique: é o débito próprio, em vigor desde 2026 |
+| Usuário pergunta por que ValorCSLL é maior que antes | Explique: agora é a soma PCC (4,65%), não só CSLL (1%) |
+| Webservice retorna erro 1001 mencionando `<TipoRetencao>` | Confirme que a flag `emitir_tipo_retencao` está `false` no config |
 
 ---
 
@@ -65,7 +131,31 @@ Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
 
 **1. Recepção de Pedido:** O usuário pedirá a nota (Valor e Tomador). Ex: "Nota de 1500 para a AMIL".
 **2. Triagem Local (`tomadores.json`):** Leia o arquivo `tomadores.json` em background. Se o Tomador já estiver cadastrado, puxe o CNPJ, endereço e e-mail de lá. Se for inédito, peça ao usuário os dados faltantes.
-**3. Simulação Financeira (Draft):** Calcule os impostos internamente cruzando com as regras do `config.json`. Responda ao usuário com um "Esboço" detalhado (Valor Bruto, valor de cada retenção aplicada, Total Líquido e Preview da Discriminação da nota).
+**3. Simulação Financeira (Draft):** Calcule os impostos internamente cruzando com as regras do `config.json`. Responda ao usuário com um "Esboço" detalhado seguindo a estrutura **PCC 2026** abaixo:
+
+> **Modelo do Esboço Financeiro (2026+):**
+>
+> | Item | Alíquota | Valor (R$) |
+> |---|---:|---:|
+> | **Valor bruto dos serviços** | — | X,XX |
+> | **Débitos próprios (informativos na NF-e):** | | |
+> | ↳ PIS (Lucro Presumido) | 0,65% | informativo |
+> | ↳ COFINS (Lucro Presumido) | 3,00% | informativo |
+> | **Retenções federais (descontam do valor recebido):** | | |
+> | ↳ Retenção PCC consolidada (quando tomador PJ ≥ R$666,67) | 4,65% | −X,XX |
+> | ↳ IRRF (quando > R$10) | 1,50% | −X,XX |
+> | **Valor líquido a receber** | | X,XX |
+> | ISS (destacado, não retido pelo tomador no padrão) | 2% | X,XX |
+>
+> **Explicação amigável para o usuário:**
+> - PIS e COFINS são *débitos próprios* (você apura/paga mensalmente) — aparecem na NF-e desde 2026 mesmo sem retenção
+> - Quando o tomador é PJ ≥ R$666,67, ele retém PCC (PIS+COFINS+CSLL = 4,65%) na fonte e paga em seu nome
+> - A retenção PCC **quita automaticamente** seu PIS/COFINS próprios do mês; CSLL pode sobrar diferença trimestral
+
+> ⚠️ **ATENÇÃO - REGRA CRÍTICA DE CARACTERES E QUEBRAS DE LINHA (ERRO 1057):**
+> O sistema de assinatura XML da Prefeitura de SP quebra e retorna o Erro 1057 se o payload JSON contiver acentuações, caracteres especiais (ç, ~, ^, ´) ou quebras de linha literais (`\n`) nos campos descritivos e razões sociais. Antes de enviar para o payload:
+> - Remova **TODOS** os acentos e "ç" da Razão Social do Tomador e da Discriminação (ex: "SAÚDE" -> "SAUDE", "SERVIÇOS" -> "SERVICOS").
+> - Remova quebras de linha (`\n`) da Discriminação, juntando todo o texto em um único parágrafo contínuo.
 **4. Oitiva Humana:** Pergunte se o usuário "Aprova o Faturamento".
 **5. Emissão e RPS:** 
    * Se aprovado, leia `contador_rps.txt` para pegar o próximo número sequencial X.
@@ -142,3 +232,22 @@ Exemplo de Resposta do Cancelar:
 }
 ```
 Use o parsing inteligente desses JSONs para formular suas respostas humanas ricas e completas no Chat do OpenClaw. Nunca despeje JSON puro para o usuário a menos que solicitado.
+
+## 🚨 5. Códigos de Erro Conhecidos da Prefeitura SP
+
+Quando a prefeitura retorna `"sucesso": false`, traduza para o usuário em linguagem simples e proponha correção. Catálogo de erros mapeados nesta skill:
+
+| Código | Causa provável | Ação sugerida |
+|:---:|---|---|
+| **260** | CEP do tomador inválido | Validar contra CEPs oficiais SP. Ex: `01310100` (Av. Paulista) |
+| **1001** | XML não compatível com Schema | Verifique se algum campo recém-adicionado (ex: `<TipoRetencao>`) foi rejeitado. A mensagem da prefeitura lista os elementos válidos esperados |
+| **1050** | Certificado inválido | Verificar validade do `.p12` com `openssl pkcs12 -in Certificados.p12 -nodes` ou inspecionar `cert.not_valid_after_utc` via Python. Renovar com a AC se expirado |
+| **1056 / 1057** | Inscrição municipal ou assinatura RPS incorreta | Confirmar IM no portal Nota Paulistana; verificar caracteres especiais na discriminação |
+| **1206** | Intermediário em formato inválido | Verificar bloco `intermediario` no JSON da nota |
+
+### 🛡️ Validação preventiva do certificado
+**Antes** de qualquer emissão (modo `teste` ou `producao`), você **deve** validar a data de expiração do certificado se não fez isso recentemente. Use:
+```bash
+./.venv/bin/python -c "from cryptography.hazmat.primitives.serialization import pkcs12; from dotenv import load_dotenv; import os; load_dotenv(); open('Certificados.p12','rb').read() and (lambda p,s: print(pkcs12.load_key_and_certificates(p, s.encode())[1].not_valid_after_utc))(open('Certificados.p12','rb').read(), os.environ['NFSE_CERT_PASSWORD'])"
+```
+Se faltarem **menos de 30 dias**, avise o usuário proativamente para renovar.
