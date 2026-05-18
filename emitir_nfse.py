@@ -342,7 +342,12 @@ def construir_xml_lote(config, nota, assinatura_rps):
         v_cofins_xml = v_cofins_debito
         v_pcc_retido_total = v_pis_retido + v_cofins_retido + v_csll_retido
         v_csll_xml = v_pcc_retido_total
-        tipo_retencao = calcular_tipo_retencao(v_pis_retido, v_cofins_retido, v_csll_retido)
+        # O campo <TipoRetencao> foi anunciado pela Prefeitura mas o webservice
+        # ainda não aceita (erro 1001). Só emitir quando habilitado explicitamente.
+        if pcc_2026.get('emitir_tipo_retencao', False):
+            tipo_retencao = calcular_tipo_retencao(v_pis_retido, v_cofins_retido, v_csll_retido)
+        else:
+            tipo_retencao = None
     else:
         # Layout legado (v1): cada campo guarda só sua própria retenção
         v_pis_xml = v_pis_retido

@@ -28,6 +28,8 @@
       "_referencia": "Lucro Presumido: PIS 0,65% / COFINS 3%. Lucro Real: PIS 1,65% / COFINS 7,6%."
     },
     "retencao_pcc_total": 4.65,
+    "emitir_tipo_retencao": false,
+    "_emitir_tipo_retencao_doc": "Em 18/05/2026 o webservice da Prefeitura SP ainda nao aceita o campo <TipoRetencao> (retorna erro 1001). Manter false ate a Prefeitura habilitar. Quando habilitar, mudar para true para emitir os codigos 0/3/4-9.",
     "_codigos_tipo_retencao": {
       "0": "PIS/COFINS/CSLL Nao Retidos",
       "3": "PIS/COFINS/CSLL Retidos",
