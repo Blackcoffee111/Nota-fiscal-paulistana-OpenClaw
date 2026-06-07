@@ -6,6 +6,60 @@ Você não precisa ser um programador para usar. Siga este passo a passo simples
 
 ---
 
+## 🎉 Novidades — Versão 2.0 (2026)
+
+Esta versão **adapta o robô às mudanças tributárias de 2026**. Foram duas frentes paralelas trabalhadas:
+
+### ✅ Frente 1 — Layout PCC 2026 (Prefeitura SP) — EM PRODUÇÃO
+
+A Prefeitura de São Paulo mudou a semântica dos campos de PIS, COFINS e CSLL na NFS-e a partir de **01/01/2026**. O robô agora emite no novo formato:
+
+| Campo | O que mudou |
+|---|---|
+| `<ValorPIS>` | Agora é o **débito próprio** do prestador (sempre preenchido). Lucro Presumido: 0,65% × valor |
+| `<ValorCOFINS>` | Agora é o **débito próprio** (sempre preenchido). Lucro Presumido: 3% × valor |
+| `<ValorCSLL>` | Agora é a **soma das retenções PCC** (PIS+COFINS+CSLL = 4,65%) quando houver retenção |
+| `<TipoRetencao>` | Anunciado pela Prefeitura, mas o webservice **ainda não aceita** (erro 1001). Implementado e desligado via flag |
+
+**Status:** ✅ Validado contra o ambiente de homologação SP em 18/05/2026 (resposta da prefeitura: `"sucesso": true`).
+
+**O que isso significa para você:** Suas notas continuam saindo normalmente. A diferença é só na **estrutura interna do XML** — a Receita Federal agora consegue cruzar automaticamente seus débitos próprios com as retenções declaradas pelos tomadores.
+
+Documentação técnica completa: [`SP_PCC_2026.md`](SP_PCC_2026.md)
+
+### ⏳ Frente 2 — Reforma Tributária Federal (IBSCBS) — EM STANDBY
+
+A Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025) introduz os tributos **CBS** (substitui PIS/COFINS) e **IBS** (substitui ISS/ICMS), com um novo grupo XML `<IBSCBS>` na NFS-e.
+
+**Status em 18/05/2026:**
+- ✅ Federal: alíquotas-teste definidas (CBS 0,9% / IBS 0,1%)
+- ❌ Prefeitura SP: webservice `lotenfe.asmx` ainda **rejeita** o grupo `<IBSCBS>` (erro 1001)
+- ✅ **LC 214/2025 dispensa o recolhimento** de CBS/IBS em 2026 — ano de teste, sem urgência fiscal
+
+**O que está pronto neste repositório:** um **scaffold completo do Layout 2** na branch `rtc-2026-layout-v2`, esperando a Prefeitura SP publicar o endpoint oficial. Quando publicarem, basta atualizar a URL e mergear.
+
+**Marco crítico:** **01/01/2027** — quando a CBS começar a valer com alíquota cheia, o Layout 2 PRECISA estar funcionando.
+
+Detalhes acionáveis: [`BRANCH_RTC_PENDENTE.md`](BRANCH_RTC_PENDENTE.md) (passo a passo para ativar quando o endpoint sair).
+
+### 📂 Estrutura das branches
+
+```
+main                  ← código de produção com PCC 2026 ativo (use este)
+rtc-2026-layout-v2    ← scaffold IBSCBS pronto, aguardando endpoint SP
+```
+
+### 🤖 Comportamento do robô
+
+O `SKILL.md` foi atualizado para que o OpenClaw:
+1. **Saiba explicar** a diferença entre débito próprio e retenção para o usuário
+2. **Mostre o esboço financeiro 2026** com PIS/COFINS de débito próprio sempre visíveis
+3. **Avise mensalmente** sobre a branch RTC em standby (sem você precisar lembrar)
+4. **Valide proativamente a expiração do certificado** (≤30 dias avisa para renovar)
+5. **Tenha catálogo de erros conhecidos** (260, 1001, 1050, 1056/1057, 1206) com solução sugerida
+
+---
+
 ## 🛠️ Instalação Passo a Passo (Para Leigos)
 
 ### 1. Onde colocar a pasta do projeto?
