@@ -6,16 +6,29 @@ description: Faturamento NFS-e SP (Emissão e Cancelamento de Notas Fiscais em S
 
 # Habilidade de Faturamento NFS-e SP (OpenClaw)
 
-> ## 🗂️ DOIS LAYOUTS COEXISTEM — saiba qual usar
+> ## 🗂️ DOIS LAYOUTS COEXISTEM — PERGUNTE AO USUÁRIO qual usar
 >
-> | Layout | Script | Quando usar | Status |
+> | Layout | Script | Situação | Status |
 > |---|---|---|---|
-> | **Layout 1** (PCC 2026) | `emitir_nfse.py` | **Produção em 2026** (padrão atual) | ✅ Em uso |
-> | **Layout 2** (IBSCBS) | `emitir_nfse_v2.py` | A partir de **2027** (quando a CBS valer) | ✅ Implementado e validado |
+> | **Layout 1** (só ISS + PCC) | `emitir_nfse.py` | Válido em 2026; **não** destaca IBS/CBS | ✅ Validado |
+> | **Layout 2** (com IBSCBS) | `emitir_nfse_v2.py` | Válido em 2026; destaca IBS/CBS (informativos); **obrigatório a partir de 2027** | ✅ Validado |
 >
-> **Regra de ouro do agente:** para qualquer emissão **em 2026**, use `emitir_nfse.py` (Layout 1). A LC 214/2025 dispensa o recolhimento de CBS/IBS em 2026 — não há motivo fiscal para usar o Layout 2 ainda. Só use `emitir_nfse_v2.py` se o usuário **pedir explicitamente** o Layout 2 / IBSCBS, ou a partir de 2027.
+> **Fato oficial (Prefeitura SP):** em **2026 os DOIS layouts são válidos** — o contribuinte escolhe. O destaque de IBS/CBS é **facultativo** em 2026 (a LC 214/2025 dispensa o *recolhimento*; o sistema não bloqueia emissão sem o destaque). A partir de **01/01/2027 o Layout 2 passa a ser obrigatório** e os tributos passam a ser recolhidos. Ambos foram validados contra a homologação SP (`{"sucesso": true}`).
 >
-> Ambos os layouts foram validados contra a homologação SP (`{"sucesso": true}`). Detalhes do Layout 2: ver seção "🆕 Layout 2 (IBSCBS)" mais abaixo e `MIGRATION_RTC_2026.md`.
+> ### 🟢 REGRA DE OURO DO AGENTE: pergunte, não presuma
+> Ao receber um pedido de emissão, **PERGUNTE ao usuário em qual layout ele quer emitir** (a menos que ele já tenha dito, ou que exista preferência salva — ver abaixo). Apresente a escolha de forma curta e clara, por exemplo:
+> > *"Em qual layout quer emitir esta nota?*
+> > *• **Layout 1** — formato tradicional, só ISS. Mais simples. Válido em 2026.*
+> > *• **Layout 2** — já com IBS/CBS destacados (Reforma Tributária). Em 2026 os valores são informativos, você não paga nada a mais. Vira obrigatório em 2027 — usar agora é um bom 'ensaio'.*
+> > *Qual prefere?"*
+>
+> Regras de apoio à decisão:
+> - **A partir de 2027** (verifique a data atual): use sempre o **Layout 2**, sem perguntar (é obrigatório).
+> - Se o usuário **não tiver preferência** ou pedir sua recomendação: sugira a **abordagem híbrida** — emitir a nota real no Layout 1 (simples) e, se ele quiser, rodar um teste em Layout 2 (`--modo teste`) para validar a preparação para 2027.
+> - Se o usuário **definir uma preferência fixa** ("sempre use o Layout 2", "daqui pra frente Layout 1"), **registre no `config.json`** o campo `"layout_preferido": "1"` ou `"2"` e **deixe de perguntar**, usando essa escolha. Se o campo existir, respeite-o.
+> - Para o **Layout 2**, antes da PRIMEIRA emissão real, confirme o enquadramento fiscal (item LC 116 → NBS/cClassTrib/cIndOp) — ver seção "🆕 Layout 2".
+>
+> Detalhes do Layout 2: ver seção "🆕 Layout 2 (IBSCBS)" mais abaixo e `MIGRATION_RTC_2026.md`.
 
 Esta documentação define o comportamento e as arquiteturas da Skill de faturamento para emitir e cancelar Notas Fiscais de Serviços Eletrônica (NFS-e) da Prefeitura de São Paulo.
 
@@ -206,19 +219,18 @@ Neste caso, pause a tarefa dele e inicie um **Wizard de Instalação Interativo 
 
 ## 🚀 1. O Fluxo de Coleta e Emissão no Chat
 
-> ### 🟢 QUAL LAYOUT USAR? (decisão obrigatória ANTES de emitir)
-> **Este fluxo usa o LAYOUT 1 (`emitir_nfse.py`) — é o padrão e o correto para hoje.**
+> ### 🟢 PASSO ZERO — QUAL LAYOUT? (decida ANTES de montar a nota)
+> Antes de qualquer cálculo, defina o layout nesta ordem de prioridade:
+> 1. **Data ≥ 01/01/2027?** → use **Layout 2** (`emitir_nfse_v2.py`), obrigatório. Não pergunte.
+> 2. **Existe `"layout_preferido"` no `config.json`?** → respeite ("1" = Layout 1 / "2" = Layout 2). Não pergunte.
+> 3. **O usuário já disse o layout no pedido?** → use o que ele disse.
+> 4. **Caso contrário (2026, sem preferência):** **PERGUNTE ao usuário** qual layout quer, explicando rápido (ver script de pergunta na "Regra de ouro" no topo do arquivo). Os dois são válidos em 2026; o Layout 2 destaca IBS/CBS (informativos, sem recolhimento).
 >
-> Regra simples, baseada na **data atual**:
-> - **Hoje / qualquer data em 2026** → **LAYOUT 1** (`emitir_nfse.py`). É este fluxo. **NÃO** use o Layout 2.
-> - **A partir de 01/01/2027** → Layout 2 (`emitir_nfse_v2.py`), quando a CBS passa a ser recolhida.
-> - **Exceção:** só use o Layout 2 antes de 2027 se o usuário pedir **explicitamente** "Layout 2", "IBSCBS" ou "teste da reforma".
->
-> Por quê: em 2026 a LC 214/2025 **dispensa o recolhimento** de CBS/IBS. Emitir no Layout 1 é o certo — não há nenhum ganho ou obrigação em usar o Layout 2 agora. Se em dúvida, **é Layout 1**.
+> Depois de decidido: **Layout 1 → `emitir_nfse.py`** (este fluxo, passo 5). **Layout 2 → `emitir_nfse_v2.py`** (ver seção "🆕 Layout 2" para o payload e os códigos). O restante das 6 etapas (triagem, esboço, oitiva, entrega) vale para os dois.
 
 Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
 
-**1. Recepção de Pedido:** O usuário pedirá a nota (Valor e Tomador). Ex: "Nota de 1500 para a AMIL".
+**1. Recepção de Pedido:** O usuário pedirá a nota (Valor e Tomador). Ex: "Nota de 1500 para a AMIL". **Resolva o PASSO ZERO acima (qual layout) antes de prosseguir.**
 **2. Triagem Local (`tomadores.json`):** Leia o arquivo `tomadores.json` em background. Se o Tomador já estiver cadastrado, puxe o CNPJ, endereço e e-mail de lá. Se for inédito, peça ao usuário os dados faltantes.
 **3. Simulação Financeira (Draft):** Calcule os impostos internamente cruzando com as regras do `config.json`. Responda ao usuário com um "Esboço" detalhado seguindo a estrutura **PCC 2026** abaixo:
 
@@ -248,8 +260,10 @@ Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
 **4. Oitiva Humana:** Pergunte se o usuário "Aprova o Faturamento".
 **5. Emissão e RPS:** 
    * Se aprovado, leia `contador_rps.txt` para pegar o próximo número sequencial X.
-   * Gere o arquivo `/tmp/dados_rps_X.json` autônomamente.
-   * Execute: `python emitir_nfse.py --modo producao --dados /tmp/dados_rps_X.json --json-out`
+   * Gere o arquivo `/tmp/dados_rps_X.json` autônomamente (no Layout 2, use o payload da seção "🆕 Layout 2", com `valor_final_cobrado` em vez de `valor_servicos`).
+   * Execute o script **conforme o layout decidido no PASSO ZERO**:
+     - **Layout 1:** `python emitir_nfse.py --modo producao --dados /tmp/dados_rps_X.json --json-out`
+     - **Layout 2:** `python emitir_nfse_v2.py --modo producao --dados /tmp/dados_rps_X.json --json-out`
    * Imediatamente incremente `contador_rps.txt` (+1).
    * **Boas práticas:** Após o passo acima finalizar, você (o Agente) deve **excluir** o arquivo temporário `/tmp/dados_rps_X.json` para manter o sistema limpo.
 **6. Entrega do PDF Final e Envio por E-mail:** Leia a saída JSON do Python. Extraia e devolva ao humano no chat:

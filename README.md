@@ -38,18 +38,22 @@ Os dois funcionam igual (por isso vêm juntos: "IBSCBS"). É o **IVA Dual** bras
 
 **Status: ✅ implementado e validado 100% contra a homologação SP (07/06/2026 — `{"sucesso": true}`).**
 
-O emissor do Layout 2 é o script **`emitir_nfse_v2.py`** (separado do `emitir_nfse.py`, que continua sendo o de produção em 2026). Ele:
+O emissor do Layout 2 é o script **`emitir_nfse_v2.py`** (separado do `emitir_nfse.py`). Ele:
 - Monta o RPS versão 2 completo (estrutura diferente: sem `<ValorServicos>`, com `<ValorFinalCobrado>`, `NBS`, `cLocPrestacao` e o grupo `<IBSCBS>`)
 - Gera a assinatura v2 (validada contra os 6 exemplos oficiais do manual — rode `python emitir_nfse_v2.py --selftest`)
 - **Valida o XML localmente contra o XSD oficial** antes de enviar (pasta `schemas_oficiais_sp/xsd_completo/`)
 - Envia com `VersaoSchema=2` no mesmo endpoint que já usamos
 
-**Quando usar cada um:**
+**Qual layout usar — em 2026 é a SUA escolha:**
 
-| Período | Use | Por quê |
-|---|---|---|
-| **2026** | `emitir_nfse.py` (Layout 1 + PCC) | Ano-teste, sem recolhimento de CBS/IBS (LC 214). O Layout 1 segue válido |
-| **2027+** | `emitir_nfse_v2.py` (Layout 2) | CBS entra valendo, PIS/COFINS extintos |
+| Período | Regra |
+|---|---|
+| **2026** | **Os dois layouts são válidos** (posição oficial da Prefeitura SP). Você escolhe. O Layout 2 destaca IBS/CBS, mas em 2026 são valores **informativos** — você **não paga nada a mais** (LC 214 dispensa o recolhimento). |
+| **2027+** | **Layout 2 obrigatório** — CBS entra valendo, PIS/COFINS extintos |
+
+> 🤖 **O robô agora pergunta.** Ao pedir uma nota em 2026, o OpenClaw pergunta em qual layout você quer emitir (explicando os dois). Se você tiver uma preferência fixa, ele salva no `config.json` (campo `"layout_preferido": "1"` ou `"2"`) e para de perguntar. A partir de 2027 ele usa o Layout 2 automaticamente.
+
+**Vale a pena já usar o Layout 2 em 2026?** É opcional, mas um bom "ensaio" sem risco: você valida toda a integração (certificado, códigos, envio) antes da obrigatoriedade de 2027, sem pagar IBS/CBS. A abordagem **híbrida** (emitir real no Layout 1 + testar o Layout 2 em `--modo teste`) é a mais segura.
 
 **Marco crítico:** **01/01/2027** — quando a CBS começar a valer, o Layout 2 precisa estar em produção. Já está pronto.
 
