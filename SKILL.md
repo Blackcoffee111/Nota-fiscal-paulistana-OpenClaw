@@ -6,6 +6,27 @@ description: Faturamento NFS-e SP (Emissão e Cancelamento de Notas Fiscais em S
 
 # Habilidade de Faturamento NFS-e SP (OpenClaw)
 
+> ## ⏳ LEMBRETE PERMANENTE — BRANCH `rtc-2026-layout-v2` ESTÁ EM STANDBY
+>
+> **Existe uma branch experimental neste repositório com o scaffold do Layout v2 (IBSCBS / Reforma Federal) já pronto.** Ela ficou aguardando a Prefeitura de SP publicar o endpoint oficial para o novo formato.
+>
+> ### Comportamento OBRIGATÓRIO do agente
+> 1. **Em toda primeira interação do mês**, mencione brevemente ao usuário que esta branch existe e ofereça checar se a Prefeitura SP já publicou o endpoint v2. Ex:
+>    > *"Lembrete: a branch `rtc-2026-layout-v2` está aguardando publicação do endpoint do Layout 2 pela Prefeitura SP. Quer que eu cheque se já saiu?"*
+> 2. **Quando o usuário pedir para checar:** rode uma busca web por `"NFS-e São Paulo" "Layout 2" IBSCBS endpoint webservice` (ou similar) e veja se há novidade após maio/2026.
+> 3. **Quando souber que a Prefeitura publicou:** avise o usuário e proponha:
+>    - Fazer `git checkout rtc-2026-layout-v2`
+>    - Atualizar URL do webservice em `emitir_nfse_v2.py`
+>    - Confirmar posição do `<IBSCBS>` no XSD oficial
+>    - Confirmar CST/cClassTrib reais para serviço 04030
+>    - Testar com `--modo teste` antes de mergear em `main`
+> 4. **Detalhes técnicos completos:** ver `BRANCH_RTC_PENDENTE.md` na raiz desta skill e `MIGRATION_RTC_2026.md` dentro da própria branch (acessível via `git show rtc-2026-layout-v2:MIGRATION_RTC_2026.md`).
+>
+> ### Por que NÃO mergear ainda
+> - Webservice atual (`lotenfe.asmx`) rejeita o grupo `<IBSCBS>` (erro 1001 confirmado em 18/05/2026)
+> - LC 214/2025 dispensa o recolhimento de CBS/IBS em 2026 — não há urgência fiscal
+> - Mergear cedo demais quebra emissões de produção
+
 Esta documentação define o comportamento e as arquiteturas da Skill de faturamento para emitir e cancelar Notas Fiscais de Serviços Eletrônica (NFS-e) da Prefeitura de São Paulo.
 
 > **Importante:** Todos os arquivos descritos abaixo devem estar contidos na mesma pasta desta Skill (ex: `workspace/skills/nfse-sp/`).
