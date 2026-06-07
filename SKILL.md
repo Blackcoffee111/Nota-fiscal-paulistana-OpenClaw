@@ -205,6 +205,17 @@ Neste caso, pause a tarefa dele e inicie um **Wizard de Instalação Interativo 
 ---
 
 ## 🚀 1. O Fluxo de Coleta e Emissão no Chat
+
+> ### 🟢 QUAL LAYOUT USAR? (decisão obrigatória ANTES de emitir)
+> **Este fluxo usa o LAYOUT 1 (`emitir_nfse.py`) — é o padrão e o correto para hoje.**
+>
+> Regra simples, baseada na **data atual**:
+> - **Hoje / qualquer data em 2026** → **LAYOUT 1** (`emitir_nfse.py`). É este fluxo. **NÃO** use o Layout 2.
+> - **A partir de 01/01/2027** → Layout 2 (`emitir_nfse_v2.py`), quando a CBS passa a ser recolhida.
+> - **Exceção:** só use o Layout 2 antes de 2027 se o usuário pedir **explicitamente** "Layout 2", "IBSCBS" ou "teste da reforma".
+>
+> Por quê: em 2026 a LC 214/2025 **dispensa o recolhimento** de CBS/IBS. Emitir no Layout 1 é o certo — não há nenhum ganho ou obrigação em usar o Layout 2 agora. Se em dúvida, **é Layout 1**.
+
 Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
 
 **1. Recepção de Pedido:** O usuário pedirá a nota (Valor e Tomador). Ex: "Nota de 1500 para a AMIL".
