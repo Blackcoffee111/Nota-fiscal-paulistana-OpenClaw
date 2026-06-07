@@ -325,6 +325,10 @@ Para o Passo 5 acima, gere um `/tmp/dados_rps_XXX.json` unicamente para o atendi
 > 4. **Confirmação visual:** após gerar o JSON, confira que tem `calcular_retencoes: true`,
 >    que nenhum valor de imposto foi parar na `discriminacao`, e que o `intermediario` foi
 >    preenchido quando o pagamento vem via operadora/plataforma.
+> 5. **Piso de retenção (R$ 10):** mesmo com fonte pagadora PJ, o script **dispensa** a
+>    retenção quando o valor fica abaixo do mínimo legal (CSRF e IRRF de R$ 10 — Lei
+>    10.833 art. 31). Por isso notas de valor baixo podem sair sem retenção: é correto,
+>    não é erro. O débito próprio PIS/COFINS é mantido mesmo assim.
 
 > [!IMPORTANT]
 > **SANITIZAÇÃO OBRIGATÓRIA ANTES DE MONTAR O JSON (Erro "assinatura difere do calculado"):**
@@ -335,7 +339,7 @@ Para o Passo 5 acima, gere um `/tmp/dados_rps_XXX.json` unicamente para o atendi
 >
 > 2. **Remover quebras de linha:** No campo `discriminacao`, substitua qualquer `\n`, `\r` ou `\r\n` por um espaço simples (` `). Textos com múltiplas linhas devem virar uma única linha contínua.
 
-Modelo:
+### Modelo A — Tomador identificado (PJ ou PF)
 ```json
 {
   "numero_rps": <Lido_do_contador_rps.txt>,
@@ -344,7 +348,7 @@ Modelo:
   "iss_retido": "N",
   "calcular_retencoes": true, // SEMPRE true — o script preenche os campos de retenção. NÃO escreva retenção na discriminacao.
   "valor_servicos": 150.00,
-  "indicador_tomador": 2, // 2=CNPJ (PJ, retém na fonte) | 1=CPF (PF, NÃO retém) | 3=Sem ID (não retém) | 4=NIF/exterior (não retém)
+  "indicador_tomador": 2, // 2=CNPJ (PJ, retém) | 1=CPF (PF, NÃO retém se não houver intermediário) | 3=Sem ID | 4=NIF/exterior
   "documento_tomador": "<Apenas_Numeros>",
   // "tomador_retem": false,  // (opcional) só p/ PJ que não retém, ex. Simples Nacional
   "razao_social_tomador": "<Nome_Empresa>",
@@ -355,6 +359,34 @@ Modelo:
   "discriminacao": "<Suas_Instrucoes_Extras>"
 }
 ```
+
+### Modelo B — SEM tomador identificado, COM intermediário de serviço
+Use quando o serviço é pago por uma **operadora/plataforma** (ex.: plano de saúde) e
+o tomador final não é identificado. O **intermediário é a fonte pagadora PJ e retém** —
+por isso `calcular_retencoes` continua `true` e as retenções saem normalmente.
+```json
+{
+  "numero_rps": <Lido_do_contador_rps.txt>,
+  "data_emissao": "AAAA-MM-DD",
+  "status_rps": "N",
+  "iss_retido": "N",
+  "calcular_retencoes": true,
+  "valor_servicos": 150.00,
+  "indicador_tomador": 3,            // 3 = Sem identificação do tomador
+  // NÃO inclua documento_tomador nem endereco_tomador (tomador vazio).
+  // razao_social_tomador é opcional; se usar, algo como "NAO INFORMADO".
+  "intermediario": {
+      "cnpj": "<CNPJ_da_operadora>",          // só números — é a fonte pagadora que retém
+      "inscricao_municipal": "<IM_ou_vazio>",  // opcional
+      "iss_retido": false                       // true se o intermediário retém o ISS
+  },
+  "discriminacao": "<Suas_Instrucoes_Extras>"
+}
+```
+> ⚠️ Com `indicador_tomador: 3` o script **não** gera o bloco `<CPFCNPJTomador>` (tomador
+> vazio), mas inclui o bloco do intermediário e **calcula as retenções** (porque há fonte
+> pagadora PJ). Se houver intermediário, **sempre** preencha o `cnpj` dele — é o que
+> dispara a retenção. (No XML da assinatura o intermediário também entra automaticamente.)
 
 ## 🟢 4. Tratamento do Standard Output
 As requisições sempre retornarão um JSON formatado pelo script.
