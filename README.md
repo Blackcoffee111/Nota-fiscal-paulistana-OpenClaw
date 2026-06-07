@@ -38,15 +38,21 @@ A Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025) introduz os tributo
 
 **O que está pronto neste repositório:** um **scaffold completo do Layout 2** na branch `rtc-2026-layout-v2`, esperando a Prefeitura SP publicar o endpoint oficial. Quando publicarem, basta atualizar a URL e mergear.
 
+**Atualização 07/06/2026:** a Prefeitura SP **já publicou o schema e o endpoint** do Layout 2 (o endpoint `nfews.../lotenfe.asmx` que já usamos comporta ambos os layouts). Ou seja, **não há mais espera externa** — falta apenas reescrever o emissor para a estrutura v02 (que é diferente: sem `<ValorServicos>`, com grupo `<IBSCBS>` obrigatório). É trabalho de implementação nosso, sem urgência fiscal (LC 214 dispensa recolhimento em 2026).
+
 **Marco crítico:** **01/01/2027** — quando a CBS começar a valer com alíquota cheia, o Layout 2 PRECISA estar funcionando.
 
-Detalhes acionáveis: [`BRANCH_RTC_PENDENTE.md`](BRANCH_RTC_PENDENTE.md) (passo a passo para ativar quando o endpoint sair).
+Detalhes acionáveis: [`BRANCH_RTC_PENDENTE.md`](BRANCH_RTC_PENDENTE.md) e `MIGRATION_RTC_2026.md` (na branch `rtc-2026-layout-v2`).
+
+### 📚 Fontes oficiais arquivadas
+
+A pasta [`fontes_oficiais_prefeitura/`](fontes_oficiais_prefeitura/) contém os documentos oficiais da Prefeitura (manual do WebService v3.3, XSDs dos layouts 1 e 2, schemas assíncronos) — a base normativa para qualquer alteração. Snapshot de 07/06/2026. Veja o [README da pasta](fontes_oficiais_prefeitura/README.md) para o índice completo com URLs e endpoints.
 
 ### 📂 Estrutura das branches
 
 ```
 main                  ← código de produção com PCC 2026 ativo (use este)
-rtc-2026-layout-v2    ← scaffold IBSCBS pronto, aguardando endpoint SP
+rtc-2026-layout-v2    ← scaffold IBSCBS; schema/endpoint já publicados, falta reescrever emissor p/ v02
 ```
 
 ### 🤖 Comportamento do robô
