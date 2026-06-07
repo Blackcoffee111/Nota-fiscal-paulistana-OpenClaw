@@ -6,42 +6,35 @@ description: Faturamento NFS-e SP (Emissão e Cancelamento de Notas Fiscais em S
 
 # Habilidade de Faturamento NFS-e SP (OpenClaw)
 
-> ## ⏳ LEMBRETE PERMANENTE — BRANCH `rtc-2026-layout-v2` ESTÁ EM STANDBY
+> ## 🗂️ DOIS LAYOUTS COEXISTEM — saiba qual usar
 >
-> **Existe uma branch experimental neste repositório com o scaffold do Layout v2 (IBSCBS / Reforma Federal) já pronto.** Ela ficou aguardando a Prefeitura de SP publicar o endpoint oficial para o novo formato.
+> | Layout | Script | Quando usar | Status |
+> |---|---|---|---|
+> | **Layout 1** (PCC 2026) | `emitir_nfse.py` | **Produção em 2026** (padrão atual) | ✅ Em uso |
+> | **Layout 2** (IBSCBS) | `emitir_nfse_v2.py` | A partir de **2027** (quando a CBS valer) | ✅ Implementado e validado |
 >
-> ### Comportamento OBRIGATÓRIO do agente
-> 1. **Em toda primeira interação do mês**, mencione brevemente ao usuário que esta branch existe e ofereça checar se a Prefeitura SP já publicou o endpoint v2. Ex:
->    > *"Lembrete: a branch `rtc-2026-layout-v2` está aguardando publicação do endpoint do Layout 2 pela Prefeitura SP. Quer que eu cheque se já saiu?"*
-> 2. **Quando o usuário pedir para checar:** rode uma busca web por `"NFS-e São Paulo" "Layout 2" IBSCBS endpoint webservice` (ou similar) e veja se há novidade após maio/2026.
-> 3. **Quando souber que a Prefeitura publicou:** avise o usuário e proponha:
->    - Fazer `git checkout rtc-2026-layout-v2`
->    - Atualizar URL do webservice em `emitir_nfse_v2.py`
->    - Confirmar posição do `<IBSCBS>` no XSD oficial
->    - Confirmar CST/cClassTrib reais para serviço 04030
->    - Testar com `--modo teste` antes de mergear em `main`
-> 4. **Detalhes técnicos completos:** ver `BRANCH_RTC_PENDENTE.md` na raiz desta skill e `MIGRATION_RTC_2026.md` dentro da própria branch (acessível via `git show rtc-2026-layout-v2:MIGRATION_RTC_2026.md`).
+> **Regra de ouro do agente:** para qualquer emissão **em 2026**, use `emitir_nfse.py` (Layout 1). A LC 214/2025 dispensa o recolhimento de CBS/IBS em 2026 — não há motivo fiscal para usar o Layout 2 ainda. Só use `emitir_nfse_v2.py` se o usuário **pedir explicitamente** o Layout 2 / IBSCBS, ou a partir de 2027.
 >
-> ### Por que NÃO mergear ainda
-> - Webservice atual (`lotenfe.asmx`) rejeita o grupo `<IBSCBS>` (erro 1001 confirmado em 18/05/2026)
-> - LC 214/2025 dispensa o recolhimento de CBS/IBS em 2026 — não há urgência fiscal
-> - Mergear cedo demais quebra emissões de produção
+> Ambos os layouts foram validados contra a homologação SP (`{"sucesso": true}`). Detalhes do Layout 2: ver seção "🆕 Layout 2 (IBSCBS)" mais abaixo e `MIGRATION_RTC_2026.md`.
 
 Esta documentação define o comportamento e as arquiteturas da Skill de faturamento para emitir e cancelar Notas Fiscais de Serviços Eletrônica (NFS-e) da Prefeitura de São Paulo.
 
 > **Importante:** Todos os arquivos descritos abaixo devem estar contidos na mesma pasta desta Skill (ex: `workspace/skills/nfse-sp/`).
 
 ## 📁 Arquivos do Ecossistema
-1. `emitir_nfse.py` - Script de emissão em produção (gera o XML SOAP, encripta e envia).
+1. `emitir_nfse.py` - **Emissor de produção (Layout 1 + PCC 2026)** — gera o XML SOAP, assina e envia.
 2. `cancelar_nfse.py` - Script de cancelamento de notas (criptografa o cancelamento).
-3. `config.json` - Retenções e alíquotas da clínica (ex: ISS, IRRF, limites, bloco `pcc_2026`).
+3. `config.json` - Dados da empresa, retenções, alíquotas, bloco `pcc_2026` (Layout 1) e bloco `ibscbs` (Layout 2).
 4. `tomadores.json` - Tabela de dados de clientes recorrentes (sua agenda).
 5. `contador_rps.txt` - Arquivo de controle rigoroso para a sequência do talão.
 6. `Certificados.p12` - Chave criptográfica municipal (JAMAIS EXPOR).
 7. `.env` - Arquivo oculto onde você lerá a variável `NFSE_CERT_PASSWORD=senha`.
 8. `baixar_notas.py` - Script paginado de extração de relatórios e balanços contábeis da clínica.
-9. `SP_PCC_2026.md` - **Documentação detalhada** das mudanças PIS/COFINS/CSLL em vigor desde 01/2026 (branch `main`).
-10. `MIGRATION_RTC_2026.md`, `emitir_nfse_v2.py`, `NT_04_v2.pdf` - Arquivos do scaffold IBSCBS (Reforma Federal). **Vivem apenas na branch `rtc-2026-layout-v2`** — em standby até a Prefeitura SP publicar o endpoint do Layout 2. Se o usuário pedir algo relacionado, faça `git checkout rtc-2026-layout-v2 -- <arquivo>` para ler.
+9. `SP_PCC_2026.md` - Documentação das mudanças PIS/COFINS/CSLL do Layout 1 (em vigor desde 05/2026).
+10. `emitir_nfse_v2.py` - **Emissor do Layout 2 (IBSCBS / Reforma Tributária)** — pronto para 2027. Tem `--selftest` (valida assinatura) e validação local contra XSD.
+11. `MIGRATION_RTC_2026.md` / `RTC_2026_README.md` - Documentação técnica e guia do Layout 2.
+12. `schemas_oficiais_sp/` - XSDs oficiais v02 (validação local) + **Anexo VIII** (tabela de correlação de códigos NBS/cIndOp/cClassTrib).
+13. `fontes_oficiais_prefeitura/` - Manual do WebService v3.3 e XSDs oficiais arquivados.
 
 ---
 
@@ -75,35 +68,99 @@ Ajuste municipal de SP na semântica dos campos de tributos federais na NFS-e, e
 
 **Referências completas:** `SP_PCC_2026.md` na pasta da skill.
 
-### Frente 2 — RTC / IBSCBS (Reforma Federal) — ⏳ **AGUARDANDO ENDPOINT SP**
+### Frente 2 — RTC / IBSCBS (Reforma Federal) — ✅ **IMPLEMENTADO E VALIDADO**
 
-Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025). Introduz CBS (substitui PIS/COFINS) e IBS (substitui ISS/ICMS), com grupo XML `<IBSCBS>`.
+Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025). Introduz CBS (substitui PIS/COFINS) e IBS (substitui ISS/ICMS), com grupo XML `<IBSCBS>`. O emissor é `emitir_nfse_v2.py`.
 
-**Status em 18/05/2026:**
-- Federal: NT 04 v1.1 publicada, alíquotas-teste CBS 0,9% / IBS 0,1% definidas
-- SP: webservice `lotenfe.asmx` ainda **não habilita** o grupo `<IBSCBS>` (retorna erro 1001)
-- **LC 214/2025 dispensa o recolhimento** de CBS/IBS em 2026 mesmo sem destaque na NF-e — não há urgência fiscal
-- Scaffold pronto em `emitir_nfse_v2.py` (branch experimental, não usar)
+**Status (07/06/2026):**
+- ✅ `emitir_nfse_v2.py` implementa o RPS v02 completo, validado contra o XSD oficial e contra a homologação SP (`{"sucesso": true}`)
+- ✅ Endpoint: o mesmo `nfews.prefeitura.sp.gov.br/lotenfe.asmx`, com `VersaoSchema=2`
+- **LC 214/2025 dispensa o recolhimento** de CBS/IBS em 2026 — por isso o **Layout 1 continua o padrão de produção em 2026**
+- Layout 2 fica pronto para acionar a partir de 2027
 
 **Cronograma futuro:**
-- 2026: ano-teste, valores informativos, sem recolhimento
-- 2027: CBS entra valendo, PIS/COFINS extintos
+- 2026: ano-teste, valores informativos, sem recolhimento → **use Layout 1**
+- 2027: CBS entra valendo, PIS/COFINS extintos → **migrar para Layout 2**
 - 2029-2032: transição gradual ISS → IBS
 - 2033: IBS pleno
 
-**Comportamento esperado do agente:** continuar emitindo no Layout v1 (com PCC 2026 ativo). Só migrar para v2 quando a Prefeitura SP publicar o endpoint oficial e o usuário pedir explicitamente.
+**Comportamento esperado do agente:** em 2026, continuar emitindo no Layout 1 (`emitir_nfse.py`). Só usar `emitir_nfse_v2.py` se o usuário pedir explicitamente o Layout 2/IBSCBS, ou a partir de 2027. Ver a seção "🆕 Layout 2 (IBSCBS)" mais abaixo para o passo a passo.
 
-**Referências completas:** `MIGRATION_RTC_2026.md` na pasta da skill.
+**Referências completas:** `MIGRATION_RTC_2026.md` e `RTC_2026_README.md`.
 
 ### Resumo prático para o agente
 
 | Situação | Ação |
 |---|---|
-| Usuário pede emissão normal | Use `emitir_nfse.py` (já tem PCC 2026 ativo) |
-| Usuário pergunta sobre IBSCBS / Reforma Tributária | Explique que está em standby, dispensa de recolhimento em 2026 |
+| Usuário pede emissão normal (2026) | Use `emitir_nfse.py` (Layout 1 + PCC 2026 ativo) |
+| Usuário pede emissão no Layout 2 / IBSCBS | Use `emitir_nfse_v2.py` — ver seção "🆕 Layout 2" abaixo |
+| Usuário pergunta sobre IBSCBS / Reforma Tributária | Explique: implementado e pronto; em 2026 sem recolhimento (LC 214); vira obrigatório em 2027 |
 | Usuário pergunta por que ValorPIS aparece sem retenção | Explique: é o débito próprio, em vigor desde 2026 |
 | Usuário pergunta por que ValorCSLL é maior que antes | Explique: agora é a soma PCC (4,65%), não só CSLL (1%) |
 | Webservice retorna erro 1001 mencionando `<TipoRetencao>` | Confirme que a flag `emitir_tipo_retencao` está `false` no config |
+| Usuário não sabe o código NBS/cIndOp/cClassTrib | Consulte o Anexo VIII — ver "🆕 Layout 2 → Como achar os códigos" |
+
+---
+
+## 🆕 Layout 2 (IBSCBS / Reforma Tributária) — manual operacional do agente
+
+> Use esta seção **apenas** quando o usuário pedir emissão no Layout 2 / IBSCBS, ou a partir de 2027. Em 2026, o padrão é o Layout 1 (`emitir_nfse.py`).
+
+### Como emitir no Layout 2
+O script é `emitir_nfse_v2.py` (mesmas flags do v1, + `--selftest` e `--no-validate`):
+```bash
+python emitir_nfse_v2.py --selftest                                  # valida a assinatura (offline, sem cert)
+python emitir_nfse_v2.py --modo teste --dados nota.json --dry-run    # monta + valida XML vs XSD (offline)
+python emitir_nfse_v2.py --modo teste --dados nota.json --json-out   # teste real (homologação, não emite)
+python emitir_nfse_v2.py --modo producao --dados nota.json --json-out # emissão REAL
+```
+O script **valida o XML localmente contra o XSD oficial** (`schemas_oficiais_sp/xsd_completo/`) antes de enviar — se acusar erro de estrutura, corrija antes de gastar requisição.
+
+### Diferenças do payload JSON no Layout 2
+O RPS v2 NÃO tem `valor_servicos`. Use estes campos na nota:
+- `valor_final_cobrado` (valor total da nota, com tributos) — substitui `valor_servicos`
+- `valor_pis`, `valor_cofins`, `valor_inss`, `valor_ir`, `valor_csll` (valores já calculados)
+- `valor_ipi` (0 para serviços), `exigibilidade_suspensa` (0), `pagamento_parcelado_antecipado` (0)
+- Os códigos IBSCBS (`nbs`, `c_ind_op`, `cclasstrib`) vêm do `config.json`, bloco `ibscbs`
+
+### 🔎 Como achar os códigos NBS / cIndOp / cClassTrib (FAÇA ISSO quando faltar)
+São 3 códigos que classificam o serviço para o IBS/CBS. **Você (agente) deve buscá-los assim:**
+
+1. **Abra a tabela oficial** já arquivada: `schemas_oficiais_sp/AnexoVIII-Correlacao-Item-NBS-IndOp-cClassTrib_*.xlsx`
+   (se não existir, baixe de [gov.br/nfse → doc. técnica → RTC](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc), arquivo `anexoviii-correlacao...xlsx`)
+2. **Leia a aba `"tabela geral"`** com openpyxl. Colunas: `Item LC 116 | Descrição | NBS | INDOP | cClassTrib`
+3. **Filtre pelo Item da LC 116** do serviço do usuário (medicina = grupo `04.xx`) ou pela descrição
+4. **Extraia** NBS, INDOP (=cIndOp) e cClassTrib da linha
+5. **Formate o NBS** removendo pontos: `1.2301.22.00` → `123012200` (9 dígitos)
+6. **Grave no `config.json`**, bloco `ibscbs`: `nbs`, `c_ind_op`, `cclasstrib`
+7. **Sempre confirme com o usuário/contador** o enquadramento (item correto) — o NBS muda por especialidade
+
+Exemplo de leitura da tabela (rode no terminal):
+```python
+import openpyxl
+wb = openpyxl.load_workbook('schemas_oficiais_sp/AnexoVIII-Correlacao-Item-NBS-IndOp-cClassTrib_v1.01.00.xlsx', data_only=True)
+ws = wb['tabela geral']
+for r in ws.iter_rows(values_only=True):
+    if r[0] and str(r[0]).startswith('04.'):   # serviços de saúde
+        print(r[0], '| NBS', r[2], '| cIndOp', r[6], '| cClassTrib', r[8])
+```
+
+### Valores já validados (MEDICINA — item 04.01, no config por padrão)
+| Campo | Valor | Significado |
+|---|---|---|
+| `nbs` | `123012200` | Serviços médicos especializados (NBS 1.2301.22.00) |
+| `c_ind_op` | `030101` | Local de incidência: local da prestação |
+| `cclasstrib` | `200029` | Saúde humana (Anexo III) — **com redução de alíquota** |
+
+⚠️ **Saúde NÃO é tributação integral.** Use `cClassTrib 200029` (redução ~60%), nunca `000001`. Itens 04.01 (medicina) e 04.03 (clínica/hospital) têm a **mesma tributação** — só muda o NBS. Veterinária (05.01) é diferente (`200052`, redução 30%); planos de saúde (04.22) usam regime próprio (`820001`).
+
+### Catálogo de erros do Layout 2 (já mapeados nos testes)
+| Código | Causa | Correção |
+|---|---|---|
+| **630** | "Código indicador da operação inexistente" | `c_ind_op` inválido — pegue o correto no Anexo VIII |
+| **268** | "Código NBS informado inválido" | `nbs` inválido — pegue no Anexo VIII e remova os pontos |
+| **640** | "ValorInicialCobrado não disponível" | Use `valor_final_cobrado` no JSON (o script já faz isso) |
+| **648** (alerta) | "PagamentoParceladoAntecipado desconsiderado" | Apenas alerta, não bloqueia |
 
 ---
 

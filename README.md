@@ -27,32 +27,69 @@ A Prefeitura de São Paulo mudou a semântica dos campos de PIS, COFINS e CSLL n
 
 Documentação técnica completa: [`SP_PCC_2026.md`](SP_PCC_2026.md)
 
-### ⏳ Frente 2 — Reforma Tributária Federal (IBSCBS) — EM STANDBY
+### ✅ Frente 2 — Reforma Tributária Federal (Layout 2 / IBSCBS) — IMPLEMENTADO E VALIDADO
 
-A Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025) introduz os tributos **CBS** (substitui PIS/COFINS) e **IBS** (substitui ISS/ICMS), com um novo grupo XML `<IBSCBS>` na NFS-e.
+A Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025) cria dois impostos novos que vão substituir os atuais:
 
-**Status em 18/05/2026:**
-- ✅ Federal: alíquotas-teste definidas (CBS 0,9% / IBS 0,1%)
-- ❌ Prefeitura SP: webservice `lotenfe.asmx` ainda **rejeita** o grupo `<IBSCBS>` (erro 1001)
-- ✅ **LC 214/2025 dispensa o recolhimento** de CBS/IBS em 2026 — ano de teste, sem urgência fiscal
+- **CBS** (Contribuição sobre Bens e Serviços) → substitui **PIS + COFINS** (federal)
+- **IBS** (Imposto sobre Bens e Serviços) → substitui **ISS + ICMS** (estados/municípios)
 
-**O que está pronto neste repositório:** um **scaffold completo do Layout 2** na branch `rtc-2026-layout-v2`, esperando a Prefeitura SP publicar o endpoint oficial. Quando publicarem, basta atualizar a URL e mergear.
+Os dois funcionam igual (por isso vêm juntos: "IBSCBS"). É o **IVA Dual** brasileiro. Na NFS-e, aparecem no novo **Layout 2**, com a tag `<IBSCBS>`.
 
-**Atualização 07/06/2026:** a Prefeitura SP **já publicou o schema e o endpoint** do Layout 2 (o endpoint `nfews.../lotenfe.asmx` que já usamos comporta ambos os layouts). Ou seja, **não há mais espera externa** — falta apenas reescrever o emissor para a estrutura v02 (que é diferente: sem `<ValorServicos>`, com grupo `<IBSCBS>` obrigatório). É trabalho de implementação nosso, sem urgência fiscal (LC 214 dispensa recolhimento em 2026).
+**Status: ✅ implementado e validado 100% contra a homologação SP (07/06/2026 — `{"sucesso": true}`).**
 
-**Marco crítico:** **01/01/2027** — quando a CBS começar a valer com alíquota cheia, o Layout 2 PRECISA estar funcionando.
+O emissor do Layout 2 é o script **`emitir_nfse_v2.py`** (separado do `emitir_nfse.py`, que continua sendo o de produção em 2026). Ele:
+- Monta o RPS versão 2 completo (estrutura diferente: sem `<ValorServicos>`, com `<ValorFinalCobrado>`, `NBS`, `cLocPrestacao` e o grupo `<IBSCBS>`)
+- Gera a assinatura v2 (validada contra os 6 exemplos oficiais do manual — rode `python emitir_nfse_v2.py --selftest`)
+- **Valida o XML localmente contra o XSD oficial** antes de enviar (pasta `schemas_oficiais_sp/xsd_completo/`)
+- Envia com `VersaoSchema=2` no mesmo endpoint que já usamos
 
-Detalhes acionáveis: [`BRANCH_RTC_PENDENTE.md`](BRANCH_RTC_PENDENTE.md) e `MIGRATION_RTC_2026.md` (na branch `rtc-2026-layout-v2`).
+**Quando usar cada um:**
+
+| Período | Use | Por quê |
+|---|---|---|
+| **2026** | `emitir_nfse.py` (Layout 1 + PCC) | Ano-teste, sem recolhimento de CBS/IBS (LC 214). O Layout 1 segue válido |
+| **2027+** | `emitir_nfse_v2.py` (Layout 2) | CBS entra valendo, PIS/COFINS extintos |
+
+**Marco crítico:** **01/01/2027** — quando a CBS começar a valer, o Layout 2 precisa estar em produção. Já está pronto.
+
+### 🔑 Os códigos fiscais do Layout 2 (e como achá-los)
+
+O Layout 2 exige 3 códigos que classificam o serviço para o IBS/CBS:
+
+| Código | O que é | Onde fica no config |
+|---|---|---|
+| **NBS** | Nomenclatura Brasileira de Serviços (9 díg.) — "que serviço é" | `ibscbs.nbs` |
+| **cIndOp** | Indicador de operação (6 díg.) — "onde o imposto é devido" | `ibscbs.c_ind_op` |
+| **cClassTrib** | Classificação tributária (6 díg.) — "como tributa / tem redução" | `ibscbs.cclasstrib` |
+
+**Valores já configurados e validados para MEDICINA (item 04.01 da LC 116):**
+- `nbs = 123012200` (serviços médicos especializados)
+- `c_ind_op = 030101` (local da prestação)
+- `cclasstrib = 200029` (saúde humana, Anexo III — **com redução de alíquota**, não tributação integral!)
+
+**Como achar para qualquer serviço** (tutorial passo a passo):
+1. Baixe o **Anexo VIII** (tabela de correlação) em [gov.br/nfse → documentação técnica → RTC](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc) — arquivo `anexoviii-correlacaoitemnbsindopcclasstrib_ibscbs_*.xlsx`. Já há uma cópia em [`schemas_oficiais_sp/`](schemas_oficiais_sp/).
+2. Abra a aba **"tabela geral"**
+3. Procure pelo **Item da LC 116** do seu serviço (medicina = grupo `04.xx`) ou pela descrição
+4. Leia as colunas **NBS**, **INDOP** (=cIndOp) e **cClassTrib**
+5. No `config.json`, tire os pontos do NBS (`1.2301.22.00` → `123012200`)
+
+> ⚠️ **Saúde tem redução de alíquota.** Médicos/clínicas usam `cClassTrib 200029` (saúde humana), **não** `000001` (integral). Usar o código errado paga imposto a mais. Os itens 04.01 (medicina) e 04.03 (clínica/hospital) têm a **mesma tributação** — só muda o NBS (descrição).
+
+Documentação técnica completa: [`MIGRATION_RTC_2026.md`](MIGRATION_RTC_2026.md) e [`RTC_2026_README.md`](RTC_2026_README.md)
 
 ### 📚 Fontes oficiais arquivadas
 
-A pasta [`fontes_oficiais_prefeitura/`](fontes_oficiais_prefeitura/) contém os documentos oficiais da Prefeitura (manual do WebService v3.3, XSDs dos layouts 1 e 2, schemas assíncronos) — a base normativa para qualquer alteração. Snapshot de 07/06/2026. Veja o [README da pasta](fontes_oficiais_prefeitura/README.md) para o índice completo com URLs e endpoints.
+Duas pastas guardam os documentos oficiais da Prefeitura/Receita (base normativa para qualquer alteração — snapshot de 06/2026):
+- [`fontes_oficiais_prefeitura/`](fontes_oficiais_prefeitura/) — manual do WebService v3.3, XSDs dos layouts 1 e 2, schemas assíncronos
+- [`schemas_oficiais_sp/`](schemas_oficiais_sp/) — XSDs v02 descompactados (para validação local) + **Anexo VIII** (tabela de correlação de códigos)
 
 ### 📂 Estrutura das branches
 
 ```
-main                  ← código de produção com PCC 2026 ativo (use este)
-rtc-2026-layout-v2    ← scaffold IBSCBS; schema/endpoint já publicados, falta reescrever emissor p/ v02
+main                  ← TUDO: Layout 1 (PCC 2026, produção) + Layout 2 (validado, p/ 2027)
+rtc-2026-layout-v2    ← histórico do desenvolvimento do Layout 2 (já consolidado na main)
 ```
 
 ### 🤖 Comportamento do robô
