@@ -10,6 +10,47 @@ Base normativa:
 
 ---
 
+> ## 🆕 ATUALIZAÇÃO 07/06/2026 — A PREFEITURA SP JÁ PUBLICOU TUDO!
+>
+> Reavaliação com as **fontes oficiais da Prefeitura** ([portal do desenvolvedor](https://notadomilhao.sf.prefeitura.sp.gov.br/desenvolvedor/) + [manual do webservice v3.3](https://notadomilhao.sf.prefeitura.sp.gov.br/wp-content/uploads/2025/11/NFe_Web_Service-4.pdf)) mudou o quadro. **O Layout 2 saiu do "aguardando" para o "implementável agora".**
+>
+> ### O que mudou desde a conclusão original (seção 6 abaixo)
+>
+> A conclusão antiga dizia "endpoint distinto, ainda não divulgado". **Estava errada.** A verdade oficial:
+>
+> | Item | Status real (fonte oficial) |
+> |---|---|
+> | **Endpoint do Layout 2** | ✅ **É o mesmo que já usamos**: `https://nfews.prefeitura.sp.gov.br/lotenfe.asmx`. O manual diz textualmente: *"Este novo endereço do serviço síncrono comporta ambos os layouts (versão 1 e 2). Recomendamos a mudança para este endereço."* |
+> | **Schema oficial do Layout 2** | ✅ **Publicado**: `schemas-reformatributaria-v02-4` (atualizado 09/01/2026). Cópia salva em `schemas_oficiais_sp/`. |
+> | **Grupo `<IBSCBS>`** | ✅ Existe no schema oficial (`tpIBSCBS`, `tpGIBSCBS`) e é **obrigatório** (`minOccurs=1`) dentro do RPS v02. |
+> | **Por que o teste anterior deu erro 1001** | Porque injetamos `<IBSCBS>` na estrutura do **Layout 1**. O Layout 2 tem estrutura de RPS **diferente** e exige `<VersaoSchema>2`. |
+>
+> ### ⚠️ Diferenças críticas do RPS v02 (descobertas no XSD oficial)
+>
+> O `tpRPS` do schema v02 **NÃO é o v01 + IBSCBS**. É uma estrutura nova:
+> - ❌ **`<ValorServicos>` não existe** no v02 (o manual confirma explicitamente)
+> - ✅ Campos de retenção **obrigatórios** (`minOccurs=1`): `ValorPIS, ValorCOFINS, ValorINSS, ValorIR, ValorCSLL`
+> - ✅ Novos campos **obrigatórios**: `ValorIPI`, `NBS` (código), `ExigibilidadeSuspensa`, `PagamentoParceladoAntecipado`
+> - ✅ Grupo `<IBSCBS>` obrigatório no fim do RPS (com `CST`, `cClassTrib`, valores, etc.)
+> - ✅ Novos campos opcionais: `NCM`, `atvEvento`, `gpPrestacao`, `ChaveNotaNacional`
+>
+> **Consequência:** o scaffold atual `emitir_nfse_v2.py` (que apenas injeta `<IBSCBS>` no XML v1) **não serve** — precisa ser reescrito para montar o RPS v02 do zero, seguindo `schemas_oficiais_sp/TiposNFe_v02.xsd`.
+>
+> ### O que falta para implementar (não é mais bloqueio externo!)
+>
+> Tudo que falta agora é **trabalho de implementação nosso** — a Prefeitura já fez a parte dela:
+> 1. Reescrever `emitir_nfse_v2.py` para a estrutura completa do RPS v02 (ver XSD em `schemas_oficiais_sp/`)
+> 2. Enviar com `<VersaoSchema>2` no envelope SOAP
+> 3. Preencher o grupo `<IBSCBS>` obrigatório (CST, cClassTrib — confirmar códigos com contador para serviço 04030)
+> 4. Preencher os novos campos obrigatórios (NBS, ValorIPI=0, ExigibilidadeSuspensa, etc.)
+> 5. Testar com `--modo teste` no mesmo endpoint
+>
+> **Continua sem urgência fiscal:** a LC 214/2025 dispensa o recolhimento de CBS/IBS em 2026. Mas agora é uma **decisão de quando implementar**, não mais uma espera pela Prefeitura. Marco para ter pronto: **01/01/2027**.
+>
+> **Sobre o `<TipoRetencao>` (PCC):** confirmado pelo XSD oficial que **não existe** em nenhum schema (v01 nem v02). A frente PCC 2026 na `main` está 100% correta. Ver `SP_PCC_2026.md` seção 7 na branch main.
+
+---
+
 ## 1. Cronograma e regras de transição
 
 | Período | CBS | IBS | PIS/COFINS | ISS |
