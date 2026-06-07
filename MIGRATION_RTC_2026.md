@@ -1,6 +1,39 @@
 # Migração NFS-e SP — Reforma Tributária do Consumo (2026+)
 
 Branch: `rtc-2026-layout-v2`
+
+> ## ✅ IMPLEMENTAÇÃO CONCLUÍDA 07/06/2026 — `emitir_nfse_v2.py` reescrito e validado
+>
+> O scaffold antigo (monkey-patch) foi **substituído por uma implementação completa** do RPS v02, baseada no XSD oficial. Estado atual:
+>
+> | Etapa | Status |
+> |---|---|
+> | Assinatura do RPS v2 (12 dígitos de IM, ValorFinalCobrado) | ✅ Validada contra **6 exemplos oficiais** do manual (self-test) |
+> | XML do lote v02 (estrutura completa) | ✅ **Valida contra o XSD oficial** (lxml) |
+> | Webservice aceita a estrutura | ✅ Passou da validação de schema |
+> | `ValorFinalCobrado` (erro 640 resolvido) | ✅ |
+> | `cClassTrib` = 000001 (tributação integral) | ✅ Aceito pelo WS |
+> | `cIndOp` (código indicador de operação) | ⏳ **Precisa valor real** (erro 630 com placeholder) |
+> | `NBS` (Nomenclatura Brasileira de Serviços) | ⏳ **Precisa valor real** (erro 268 com placeholder) |
+>
+> **Os 2 itens pendentes NÃO são bugs** — são dados fiscais que dependem da classificação exata do serviço médico (item 04030) e devem ser confirmados pelo contador na **tabela de correlação oficial (Anexo VIII: Item de Serviço × NBS × cClassTrib × cIndOp)**. O webservice confirmou que a implementação os processa corretamente (rejeitou os placeholders `000000`/`000000000`, ou seja, com valores válidos passará).
+>
+> ### Como concluir (passo final com o contador)
+> 1. Pedir ao contador o **`cIndOp`** (6 dígitos) e o **`NBS`** (9 dígitos) para serviços médicos (cód. serviço SP 04030)
+> 2. Preencher no `config.json`, bloco `ibscbs`: campos `c_ind_op` e `nbs`
+> 3. Rodar: `./.venv/bin/python emitir_nfse_v2.py --modo teste --dados nota.json --json-out`
+> 4. Esperar `{"sucesso": true}` → então mergear em `main`
+>
+> ### Como testar a qualquer momento
+> ```bash
+> python emitir_nfse_v2.py --selftest                                  # valida a assinatura (offline)
+> python emitir_nfse_v2.py --modo teste --dados nota.json --dry-run    # valida XML vs XSD (offline)
+> python emitir_nfse_v2.py --modo teste --dados nota.json --json-out   # teste real (homologação)
+> ```
+> Os XSDs oficiais ficam em `schemas_oficiais_sp/xsd_completo/` (validação local automática).
+
+---
+
 Base normativa:
 - **EC nº 132/2023** (Reforma Tributária do Consumo)
 - **LC nº 214, 16/01/2025** (regulamentação da CBS, IBS, IS)

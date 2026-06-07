@@ -18,25 +18,40 @@
     "irrf": 10.0,
     "csrf": 10.0
   },
+  "pcc_2026": {
+    "habilitado": true,
+    "_comentario": "Regras de PIS/COFINS/CSLL da Prefeitura SP a partir de 2026 (regime PCC/CRF). ValorPIS e ValorCOFINS passam a ser DÉBITOS PRÓPRIOS (sempre preenchidos). ValorCSLL passa a ser a SOMA das retenções PIS+COFINS+CSLL (apenas quando retidas). Novo campo TipoRetencao identifica o tipo (0=não retido, 3=todos retidos, etc).",
+    "regime_tributario": "lucro_presumido",
+    "debito_proprio": {
+      "pis": 0.65,
+      "cofins": 3.0,
+      "_referencia": "Lucro Presumido: PIS 0,65% / COFINS 3%. Lucro Real: PIS 1,65% / COFINS 7,6%."
+    },
+    "retencao_pcc_total": 4.65,
+    "emitir_tipo_retencao": false,
+    "_emitir_tipo_retencao_doc": "MANTER false. Investigacao de 07/06/2026 confirmou que o webservice legado de SP (lotenfe.asmx) NAO possui campo de tipo de retencao no schema (mapa: ValorCSLL > CodigoServico > AliquotaServicos). A Prefeitura infere o tipo a partir de ValorCSLL > 0. O campo so existe na emissao online (portal) e no padrao Nacional gov.br (tpRetPisCofins, regido pela NT 007/2026 que nao afeta SP). Ligar esta flag causa erro 1001. Ver SP_PCC_2026.md secao 7.",
+    "_codigos_tipo_retencao": {
+      "0": "PIS/COFINS/CSLL Nao Retidos",
+      "3": "PIS/COFINS/CSLL Retidos",
+      "4": "PIS/COFINS Retidos, CSLL Nao Retido",
+      "5": "PIS Retido, COFINS/CSLL Nao Retidos",
+      "6": "COFINS Retido, PIS/CSLL Nao Retidos",
+      "7": "PIS Nao Retido, COFINS/CSLL Retidos",
+      "8": "PIS/COFINS Nao Retidos, CSLL Retido",
+      "9": "COFINS Nao Retido, PIS/CSLL Retidos"
+    }
+  },
   "mensagem_padrao": "",
   "ibscbs": {
-    "habilitado": false,
-    "_comentario": "Mude habilitado=true para emitir no layout v2 (RTC). Em 2026 os valores são apenas informativos — recolhimento dispensado pela LC 214/2025 art. 343-348.",
+    "_comentario": "Layout 2 (Reforma Tributaria 2026) usado por emitir_nfse_v2.py. Campos do grupo IBSCBS conforme TiposNFe_v02.xsd.",
     "fin_nfse": 0,
     "ind_final": 0,
-    "c_ind_op": "111111",
     "ind_dest": 0,
-    "cst": "000",
+    "c_ind_op": "000000",
     "cclasstrib": "000001",
-    "ccredpres": null,
-    "aliquota_cbs": 0.009,
-    "aliquota_ibs_uf": 0.001,
-    "aliquota_ibs_mun": 0.000,
-    "_referencias": {
-      "cst_doc": "Tabela CST IBS/CBS — Informe Técnico RT 2025.002 v1.10",
-      "cclasstrib_doc": "Tabela cClassTrib — Informe Técnico RT 2025.002 v1.10",
-      "c_ind_op_doc": "AnexoVII-IndOp_IBSCBS_V1.00.00.xlsx (art. 11 LC 214/2025)",
-      "aliquotas_2026": "CBS 0,9% / IBS 0,1% (alíquotas-teste — fase informativa)"
-    }
+    "nbs": "000000000",
+    "_CONFIRMAR_COM_CONTADOR": "Os codigos abaixo sao placeholders estruturais. Antes de emitir REAL no layout 2, confirme com o contador: (1) c_ind_op = codigo indicador de operacao 6 digitos do AnexoVII-IndOp_IBSCBS; (2) cclasstrib = codigo de classificacao tributaria 6 digitos para servico medico (cod 04030); (3) nbs = Nomenclatura Brasileira de Servicos 9 digitos para consultas medicas. Em 2026 os valores sao informativos (LC 214 dispensa recolhimento).",
+    "aliquota_cbs_2026": 0.009,
+    "aliquota_ibs_2026": 0.001
   }
 }
