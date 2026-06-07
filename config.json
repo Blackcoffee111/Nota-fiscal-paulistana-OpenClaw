@@ -47,10 +47,10 @@
     "fin_nfse": 0,
     "ind_final": 0,
     "ind_dest": 0,
-    "c_ind_op": "000000",
-    "cclasstrib": "000001",
-    "nbs": "000000000",
-    "_CONFIRMAR_COM_CONTADOR": "Os codigos abaixo sao placeholders estruturais. Antes de emitir REAL no layout 2, confirme com o contador: (1) c_ind_op = codigo indicador de operacao 6 digitos do AnexoVII-IndOp_IBSCBS; (2) cclasstrib = codigo de classificacao tributaria 6 digitos para servico medico (cod 04030); (3) nbs = Nomenclatura Brasileira de Servicos 9 digitos para consultas medicas. Em 2026 os valores sao informativos (LC 214 dispensa recolhimento).",
+    "c_ind_op": "030101",
+    "cclasstrib": "200029",
+    "nbs": "123012200",
+    "_CONFIRMAR_COM_CONTADOR": "Valores preenchidos para MEDICINA (item 04.01 LC 116), conforme tabela oficial AnexoVIII (schemas_oficiais_sp/). Validado contra homologacao SP em 07/06/2026 (sucesso=true). c_ind_op=030101 (local da prestacao); cclasstrib=200029 (saude humana Anexo III, com reducao de aliquota); nbs=123012200 (servicos medicos especializados, NBS 1.2301.22.00). CONFIRME com o contador se o item correto e 04.01 (Medicina) ou outro (04.03 clinica, 04.08 fisio/fono, etc) pois o NBS muda conforme a especialidade.",
     "aliquota_cbs_2026": 0.009,
     "aliquota_ibs_2026": 0.001
   }

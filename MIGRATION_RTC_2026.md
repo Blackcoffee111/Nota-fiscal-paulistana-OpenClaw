@@ -2,27 +2,36 @@
 
 Branch: `rtc-2026-layout-v2`
 
-> ## ✅ IMPLEMENTAÇÃO CONCLUÍDA 07/06/2026 — `emitir_nfse_v2.py` reescrito e validado
+> ## ✅✅ LAYOUT 2 VALIDADO 100% — homologação SP retornou `{"sucesso": true}` (07/06/2026)
 >
-> O scaffold antigo (monkey-patch) foi **substituído por uma implementação completa** do RPS v02, baseada no XSD oficial. Estado atual:
+> O scaffold antigo (monkey-patch) foi **substituído por uma implementação completa** do RPS v02 e **validada de ponta a ponta** contra a homologação da Prefeitura.
 >
 > | Etapa | Status |
 > |---|---|
 > | Assinatura do RPS v2 (12 dígitos de IM, ValorFinalCobrado) | ✅ Validada contra **6 exemplos oficiais** do manual (self-test) |
-> | XML do lote v02 (estrutura completa) | ✅ **Valida contra o XSD oficial** (lxml) |
-> | Webservice aceita a estrutura | ✅ Passou da validação de schema |
+> | XML do lote v02 (estrutura completa) | ✅ Valida contra o XSD oficial (lxml) |
 > | `ValorFinalCobrado` (erro 640 resolvido) | ✅ |
-> | `cClassTrib` = 000001 (tributação integral) | ✅ Aceito pelo WS |
-> | `cIndOp` (código indicador de operação) | ⏳ **Precisa valor real** (erro 630 com placeholder) |
-> | `NBS` (Nomenclatura Brasileira de Serviços) | ⏳ **Precisa valor real** (erro 268 com placeholder) |
+> | `cIndOp`, `cClassTrib`, `NBS` (códigos reais de medicina) | ✅ Aceitos pelo webservice |
+> | **Emissão completa em homologação** | ✅ **`{"sucesso": true}`** |
 >
-> **Os 2 itens pendentes NÃO são bugs** — são dados fiscais que dependem da classificação exata do serviço médico (item 04030) e devem ser confirmados pelo contador na **tabela de correlação oficial (Anexo VIII: Item de Serviço × NBS × cClassTrib × cIndOp)**. O webservice confirmou que a implementação os processa corretamente (rejeitou os placeholders `000000`/`000000000`, ou seja, com valores válidos passará).
+> ### 🔑 Códigos fiscais para MEDICINA (descobertos no Anexo VIII oficial)
 >
-> ### Como concluir (passo final com o contador)
-> 1. Pedir ao contador o **`cIndOp`** (6 dígitos) e o **`NBS`** (9 dígitos) para serviços médicos (cód. serviço SP 04030)
-> 2. Preencher no `config.json`, bloco `ibscbs`: campos `c_ind_op` e `nbs`
-> 3. Rodar: `./.venv/bin/python emitir_nfse_v2.py --modo teste --dados nota.json --json-out`
-> 4. Esperar `{"sucesso": true}` → então mergear em `main`
+> Para o item **04.01 da LC 116 (Medicina e Biomedicina)**:
+>
+> | Campo | Valor | Significado |
+> |---|---|---|
+> | `nbs` | **123012200** | NBS 1.2301.22.00 — "Serviços médicos especializados" |
+> | `c_ind_op` | **030101** | Local de incidência: "local da prestação" |
+> | `cclasstrib` | **200029** | "Fornecimento dos serviços de saúde humana (Anexo III)" — **com redução de alíquota** (saúde não é tributação integral!) |
+>
+> ⚠️ **Importante:** saúde tem **redução de alíquota** (cClassTrib 200029, não 000001). Usar o código de tributação integral faria pagar imposto a mais. **Confirme com o contador** se a clínica se enquadra em 04.01 (Medicina), 04.03 (clínica/hospital), 04.08 (fisio/fono), etc — o NBS muda conforme a especialidade. Todos esses valores estão na planilha `schemas_oficiais_sp/AnexoVIII-Correlacao-*.xlsx`.
+>
+> ### Como achar os códigos de qualquer serviço (tutorial)
+> 1. Baixe o **Anexo VIII** oficial: portal [gov.br/nfse → documentação técnica → RTC](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc) → arquivo `anexoviii-correlacaoitemnbsindopcclasstrib_ibscbs_*.xlsx` (cópia em `schemas_oficiais_sp/`)
+> 2. Abra a aba **"tabela geral"**
+> 3. Procure pelo **Item da LC 116** do seu serviço (medicina = grupo 04.xx) ou pela descrição
+> 4. Leia nas colunas: **NBS**, **INDOP** (=cIndOp) e **cClassTrib**
+> 5. No `config.json`, remova os pontos do NBS (1.2301.22.00 → 123012200)
 >
 > ### Como testar a qualquer momento
 > ```bash
@@ -31,6 +40,9 @@ Branch: `rtc-2026-layout-v2`
 > python emitir_nfse_v2.py --modo teste --dados nota.json --json-out   # teste real (homologação)
 > ```
 > Os XSDs oficiais ficam em `schemas_oficiais_sp/xsd_completo/` (validação local automática).
+>
+> ### Pronto para produção?
+> Tecnicamente **sim** — em 2026 ainda sem recolhimento (LC 214). Antes de emitir REAL no layout 2, confirme com o contador o enquadramento (item LC 116) e faça um teste com `--modo teste`. Depois é só mergear em `main`.
 
 ---
 
