@@ -159,6 +159,21 @@ Não há lugar para um campo de tipo de retenção em nenhuma posição da sequ�
 ✅ A skill está **totalmente em conformidade** com as regras vigentes desde 14/05/2026. Nenhuma alteração de código é necessária.
 ✅ A flag `emitir_tipo_retencao` foi mantida (default `false`) apenas como salvaguarda — caso a Prefeitura algum dia adicione o campo ao webservice legado, basta ligá-la. Mas isso é **improvável**, pois a inferência por `<ValorCSLL>` já resolve.
 
+### ✅ CONFIRMAÇÃO PELO XSD OFICIAL (07/06/2026)
+
+Baixamos o **XSD oficial da Prefeitura** direto do [portal do desenvolvedor](https://notadomilhao.sf.prefeitura.sp.gov.br/desenvolvedor/) e inspecionamos a definição do RPS (`tpRPS`) nos dois schemas:
+
+| Schema | Arquivo | Sequência dos campos de tributos |
+|---|---|---|
+| Legado (até 31/12/2025) | `TiposNFe_v01.xsd` | `ValorPIS → ValorCOFINS → ValorINSS → ValorIR → ValorCSLL → CodigoServico` |
+| Reforma 2026 | `TiposNFe_v02.xsd` (atualizado 29/12/2025) | idêntico: `ValorPIS → ValorCOFINS → ValorINSS → ValorIR → ValorCSLL → CodigoServico` |
+
+**Busca exaustiva por `TipoRetencao` / `tpRet` / `indReten` nos dois XSDs: zero resultados.** A única ocorrência de "Ret" é `RetornoComplementarIBSCBS` (retorno de IBS/CBS, não retenção de tributos). Isso é **prova documental** de que o campo de tipo de retenção não existe no webservice de SP — nem no legado, nem na reforma 2026. A skill está definitivamente correta.
+
+**Fontes oficiais consultadas:**
+- XSD: `schemas-reformatributaria-v02-4` (atualizado 09/01/2026) — [portal desenvolvedor](https://notadomilhao.sf.prefeitura.sp.gov.br/desenvolvedor/)
+- Manual: [NFe_Web_Service v3.3](https://notadomilhao.sf.prefeitura.sp.gov.br/wp-content/uploads/2025/11/NFe_Web_Service-4.pdf) (nov/2025)
+
 **Para reproduzir o teste de conformidade** (não emite nota real):
 ```bash
 ./.venv/bin/python emitir_nfse.py --modo teste --dados nota.json --json-out
