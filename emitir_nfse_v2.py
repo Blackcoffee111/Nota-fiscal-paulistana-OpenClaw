@@ -205,6 +205,21 @@ def construir_xml_lote_v2(config, nota, assinatura_rps):
     v_final = (nota.get('valor_final_cobrado') or nota.get('valor_inicial_cobrado')
                or nota.get('valor_servicos', 0))
 
+    # REGRA FISCAL (proteção defensiva): retenção na fonte (IRRF, INSS, e a
+    # soma PCC no ValorCSLL) só vale quando o TOMADOR é PJ (indicador 2).
+    # PF (1), sem identificação (3) e exterior (4) NÃO retêm. O débito próprio
+    # (ValorPIS/ValorCOFINS) é SEMPRE mantido, independe do tomador.
+    # Override: "tomador_retem": false no JSON (ex.: PJ do Simples Nacional).
+    tomador_eh_pj = nota.get('indicador_tomador') == 2
+    tomador_retem = nota.get('tomador_retem', tomador_eh_pj)
+    v_pis = nota.get('valor_pis', 0)        # débito próprio — sempre
+    v_cofins = nota.get('valor_cofins', 0)  # débito próprio — sempre
+    v_inss = nota.get('valor_inss', 0) if tomador_retem else 0
+    v_ir = nota.get('valor_ir', 0) if tomador_retem else 0
+    v_csll = nota.get('valor_csll', 0) if tomador_retem else 0
+    if not tomador_retem and (nota.get('valor_ir') or nota.get('valor_csll') or nota.get('valor_inss')):
+        log("⚠️  Tomador não-PJ: retenções (IRRF/INSS/CSLL) zeradas — PF não retém na fonte. Débito próprio PIS/COFINS mantido.")
+
     # Discriminação (sem acentos/quebras — regra anti-erro 1057)
     texto_disc = str(nota.get('discriminacao', '')).strip()
     msg = config.get('mensagem_padrao', '').strip()
@@ -266,11 +281,11 @@ def construir_xml_lote_v2(config, nota, assinatura_rps):
         f'<StatusRPS>{nota["status_rps"]}</StatusRPS>'
         f'<TributacaoRPS>{config["tributacao_rps"]}</TributacaoRPS>'
         f'<ValorDeducoes>{formata_valor(nota.get("valor_deducoes",0))}</ValorDeducoes>'
-        f'<ValorPIS>{formata_valor(nota.get("valor_pis",0))}</ValorPIS>'
-        f'<ValorCOFINS>{formata_valor(nota.get("valor_cofins",0))}</ValorCOFINS>'
-        f'<ValorINSS>{formata_valor(nota.get("valor_inss",0))}</ValorINSS>'
-        f'<ValorIR>{formata_valor(nota.get("valor_ir",0))}</ValorIR>'
-        f'<ValorCSLL>{formata_valor(nota.get("valor_csll",0))}</ValorCSLL>'
+        f'<ValorPIS>{formata_valor(v_pis)}</ValorPIS>'
+        f'<ValorCOFINS>{formata_valor(v_cofins)}</ValorCOFINS>'
+        f'<ValorINSS>{formata_valor(v_inss)}</ValorINSS>'
+        f'<ValorIR>{formata_valor(v_ir)}</ValorIR>'
+        f'<ValorCSLL>{formata_valor(v_csll)}</ValorCSLL>'
         f'<CodigoServico>{config["codigo_servico"]}</CodigoServico>'
         f'<AliquotaServicos>{config["aliquota_servicos"]}</AliquotaServicos>'
         f'<ISSRetido>{iss_retido_bool}</ISSRetido>'

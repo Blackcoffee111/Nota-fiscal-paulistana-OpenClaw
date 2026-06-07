@@ -112,6 +112,9 @@ Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025). Introduz CBS (substi
 | Usuário pergunta por que ValorCSLL é maior que antes | Explique: agora é a soma PCC (4,65%), não só CSLL (1%) |
 | Webservice retorna erro 1001 mencionando `<TipoRetencao>` | Confirme que a flag `emitir_tipo_retencao` está `false` no config |
 | Usuário não sabe o código NBS/cIndOp/cClassTrib | Consulte o Anexo VIII — ver "🆕 Layout 2 → Como achar os códigos" |
+| Vai montar o payload de uma emissão | **SEMPRE** `calcular_retencoes: true`; **nunca** escreva retenção na `discriminacao` — o script preenche os campos `<ValorPIS/COFINS/CSLL/IR>` |
+| Nota para **Pessoa Física** (CPF) | **Sem retenção** — só débito próprio PIS/COFINS. O script zera IRRF/PCC automaticamente; o esboço não deve mostrar linha de retenção |
+| Nota para PJ que não retém (ex: Simples) | Adicione `"tomador_retem": false` no JSON |
 
 ---
 
@@ -252,6 +255,8 @@ Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
 > - PIS e COFINS são *débitos próprios* (você apura/paga mensalmente) — aparecem na NF-e desde 2026 mesmo sem retenção
 > - Quando o tomador é PJ ≥ R$666,67, ele retém PCC (PIS+COFINS+CSLL = 4,65%) na fonte e paga em seu nome
 > - A retenção PCC **quita automaticamente** seu PIS/COFINS próprios do mês; CSLL pode sobrar diferença trimestral
+>
+> ⚠️ **A tabela acima é para tomador PJ.** Se o tomador for **Pessoa Física** (ou sem identificação / exterior), **REMOVA as linhas de retenção** do esboço — PF **não retém** nada na fonte. O esboço de PF mostra só: valor bruto, débitos próprios PIS/COFINS (informativos), ISS e o líquido (= bruto, pois nada é retido). O script faz isso sozinho, mas o seu esboço deve refletir corretamente.
 
 > ⚠️ **ATENÇÃO - REGRA CRÍTICA DE CARACTERES E QUEBRAS DE LINHA (ERRO 1057):**
 > O sistema de assinatura XML da Prefeitura de SP quebra e retorna o Erro 1057 se o payload JSON contiver acentuações, caracteres especiais (ç, ~, ^, ´) ou quebras de linha literais (`\n`) nos campos descritivos e razões sociais. Antes de enviar para o payload:
@@ -290,6 +295,30 @@ Use o script `baixar_notas.py` que consulta a Prefeitura e produz um extrato aut
 Para o Passo 5 acima, gere um `/tmp/dados_rps_XXX.json` unicamente para o atendimento.
 
 > [!IMPORTANT]
+> **RETENÇÕES VÃO NOS CAMPOS PRÓPRIOS — NUNCA apenas no texto da discriminação.**
+> As retenções (PIS, COFINS, CSLL, IRRF) são gravadas em campos XML específicos
+> (`<ValorPIS>`, `<ValorCOFINS>`, `<ValorCSLL>`, `<ValorIR>`), e o **script preenche
+> esses campos automaticamente**. Você (agente) NÃO calcula nem escreve valores de
+> retenção na mão.
+>
+> **Regras obrigatórias ao montar o JSON:**
+> 1. **SEMPRE inclua `"calcular_retencoes": true`** (Layout 1). Sem isso, os campos de
+>    retenção saem em branco — exatamente o erro a evitar. O script lê as alíquotas do
+>    `config.json` e preenche `<ValorPIS/COFINS/CSLL/IR>` sozinho.
+> 2. **NÃO** escreva valores de imposto/retenção dentro de `discriminacao`. A discriminação
+>    é só o texto descritivo do serviço (+ a `mensagem_padrao`, que o script anexa). Os
+>    números das retenções pertencem aos campos próprios, não ao corpo do texto.
+> 3. **PESSOA FÍSICA NÃO TEM RETENÇÃO.** Retenção na fonte (IRRF/PIS/COFINS/CSLL) só
+>    existe quando o **tomador é PJ** (`indicador_tomador: 2`). Para PF (`1`), sem
+>    identificação (`3`) ou exterior (`4`), o script **zera as retenções automaticamente**
+>    e mantém apenas o **débito próprio** de PIS/COFINS (que independe do tomador). Reflita
+>    isso no esboço financeiro: nota para PF não mostra linha de retenção.
+>    - *Override raro:* PJ que comprovadamente não retém (ex.: optante do Simples) →
+>      adicione `"tomador_retem": false` no JSON.
+> 4. **Confirmação visual:** após gerar o JSON, confira que ele tem `calcular_retencoes: true`
+>    (PJ) e que nenhum valor de imposto foi parar na `discriminacao`.
+
+> [!IMPORTANT]
 > **SANITIZAÇÃO OBRIGATÓRIA ANTES DE MONTAR O JSON (Erro "assinatura difere do calculado"):**
 > A Prefeitura de São Paulo valida a assinatura digital comparando o XML recebido com um digest calculado internamente. Acentos e quebras de linha nos campos de texto fazem essa comparação falhar, gerando o erro de assinatura. **Antes de escrever qualquer campo de texto no JSON**, aplique obrigatoriamente as duas regras abaixo:
 >
@@ -305,10 +334,11 @@ Modelo:
   "data_emissao": "AAAA-MM-DD",
   "status_rps": "N",
   "iss_retido": "N",
-  "calcular_retencoes": true,
+  "calcular_retencoes": true, // SEMPRE true — o script preenche os campos de retenção. NÃO escreva retenção na discriminacao.
   "valor_servicos": 150.00,
-  "indicador_tomador": 2, // 2 para CNPJ, 1 para CPF, 3 para Sem Identificação
+  "indicador_tomador": 2, // 2=CNPJ (PJ, retém na fonte) | 1=CPF (PF, NÃO retém) | 3=Sem ID (não retém) | 4=NIF/exterior (não retém)
   "documento_tomador": "<Apenas_Numeros>",
+  // "tomador_retem": false,  // (opcional) só p/ PJ que não retém, ex. Simples Nacional
   "razao_social_tomador": "<Nome_Empresa>",
   "email_tomador": "<Email_Cliente>",
   "endereco_tomador": {

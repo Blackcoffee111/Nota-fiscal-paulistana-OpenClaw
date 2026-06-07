@@ -295,7 +295,17 @@ def construir_xml_lote(config, nota, assinatura_rps):
 
     itens_retencao = []
 
-    if calcular and retencoes:
+    # REGRA FISCAL: retenção na fonte (IRRF, PIS, COFINS, CSLL, INSS) só ocorre
+    # quando o TOMADOR é Pessoa Jurídica (indicador_tomador == 2). Pessoa física
+    # (1), tomador sem identificação (3) e tomador no exterior (4) NÃO retêm
+    # tributos na fonte — Lei 10.833/2003 art. 30 (PCC) e RIR art. 714 (IRRF)
+    # se aplicam apenas entre pessoas jurídicas.
+    # Override opcional via JSON "tomador_retem": false (ex.: PJ optante do
+    # Simples Nacional que, em regra, não sofre retenção de PCC).
+    tomador_eh_pj = nota.get('indicador_tomador') == 2
+    tomador_retem = nota.get('tomador_retem', tomador_eh_pj)
+
+    if calcular and retencoes and tomador_retem:
         if retencoes.get('pis', 0) > 0:
             v_pis_retido = (val_servicos * Decimal(str(retencoes['pis'])) / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         if retencoes.get('cofins', 0) > 0:
