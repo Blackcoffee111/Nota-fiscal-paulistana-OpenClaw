@@ -206,19 +206,24 @@ def construir_xml_lote_v2(config, nota, assinatura_rps):
                or nota.get('valor_servicos', 0))
 
     # REGRA FISCAL (proteção defensiva): retenção na fonte (IRRF, INSS, e a
-    # soma PCC no ValorCSLL) só vale quando o TOMADOR é PJ (indicador 2).
-    # PF (1), sem identificação (3) e exterior (4) NÃO retêm. O débito próprio
+    # soma PCC no ValorCSLL) ocorre quando a FONTE PAGADORA é PJ:
+    #   (a) o TOMADOR, se PJ (indicador 2); OU
+    #   (b) o INTERMEDIÁRIO do serviço, quando houver (retém mesmo sem tomador
+    #       identificado — indicador 3).
+    # PF (1) ou exterior (4) SEM intermediário NÃO retêm. O débito próprio
     # (ValorPIS/ValorCOFINS) é SEMPRE mantido, independe do tomador.
-    # Override: "tomador_retem": false no JSON (ex.: PJ do Simples Nacional).
+    # Override: "tomador_retem": true/false no JSON (ex.: PJ do Simples).
     tomador_eh_pj = nota.get('indicador_tomador') == 2
-    tomador_retem = nota.get('tomador_retem', tomador_eh_pj)
+    tem_intermediario = bool(limpa_documento(nota.get('intermediario', {}).get('cnpj', '')))
+    fonte_pagadora_pj = tomador_eh_pj or tem_intermediario
+    tomador_retem = nota.get('tomador_retem', fonte_pagadora_pj)
     v_pis = nota.get('valor_pis', 0)        # débito próprio — sempre
     v_cofins = nota.get('valor_cofins', 0)  # débito próprio — sempre
     v_inss = nota.get('valor_inss', 0) if tomador_retem else 0
     v_ir = nota.get('valor_ir', 0) if tomador_retem else 0
     v_csll = nota.get('valor_csll', 0) if tomador_retem else 0
     if not tomador_retem and (nota.get('valor_ir') or nota.get('valor_csll') or nota.get('valor_inss')):
-        log("⚠️  Tomador não-PJ: retenções (IRRF/INSS/CSLL) zeradas — PF não retém na fonte. Débito próprio PIS/COFINS mantido.")
+        log("⚠️  Sem fonte pagadora PJ (tomador PF e sem intermediário): retenções IRRF/INSS/CSLL zeradas. Débito próprio PIS/COFINS mantido.")
 
     # Discriminação (sem acentos/quebras — regra anti-erro 1057)
     texto_disc = str(nota.get('discriminacao', '')).strip()

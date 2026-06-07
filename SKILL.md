@@ -113,7 +113,8 @@ Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025). Introduz CBS (substi
 | Webservice retorna erro 1001 mencionando `<TipoRetencao>` | Confirme que a flag `emitir_tipo_retencao` está `false` no config |
 | Usuário não sabe o código NBS/cIndOp/cClassTrib | Consulte o Anexo VIII — ver "🆕 Layout 2 → Como achar os códigos" |
 | Vai montar o payload de uma emissão | **SEMPRE** `calcular_retencoes: true`; **nunca** escreva retenção na `discriminacao` — o script preenche os campos `<ValorPIS/COFINS/CSLL/IR>` |
-| Nota para **Pessoa Física** (CPF) | **Sem retenção** — só débito próprio PIS/COFINS. O script zera IRRF/PCC automaticamente; o esboço não deve mostrar linha de retenção |
+| Nota para **Pessoa Física** (CPF) **sem intermediário** | **Sem retenção** — só débito próprio PIS/COFINS. O script zera IRRF/PCC automaticamente; o esboço não mostra linha de retenção |
+| Nota **sem tomador identificado mas com intermediário** (ex: via operadora) | **TEM retenção** — o intermediário é a fonte pagadora PJ. Preencha o bloco `intermediario` (CNPJ, inscrição, iss_retido). O script calcula as retenções normalmente |
 | Nota para PJ que não retém (ex: Simples) | Adicione `"tomador_retem": false` no JSON |
 
 ---
@@ -256,7 +257,7 @@ Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
 > - Quando o tomador é PJ ≥ R$666,67, ele retém PCC (PIS+COFINS+CSLL = 4,65%) na fonte e paga em seu nome
 > - A retenção PCC **quita automaticamente** seu PIS/COFINS próprios do mês; CSLL pode sobrar diferença trimestral
 >
-> ⚠️ **A tabela acima é para tomador PJ.** Se o tomador for **Pessoa Física** (ou sem identificação / exterior), **REMOVA as linhas de retenção** do esboço — PF **não retém** nada na fonte. O esboço de PF mostra só: valor bruto, débitos próprios PIS/COFINS (informativos), ISS e o líquido (= bruto, pois nada é retido). O script faz isso sozinho, mas o seu esboço deve refletir corretamente.
+> ⚠️ **A tabela acima é para quando há fonte pagadora PJ** (tomador PJ **ou** intermediário). Se a nota for para **Pessoa Física pura** (sem intermediário), **REMOVA as linhas de retenção** do esboço — não há retenção; mostre só valor bruto, débitos próprios PIS/COFINS (informativos), ISS e líquido (= bruto). **Mas se houver intermediário** (operadora/plataforma que paga), **mantenha as retenções** mesmo sem tomador identificado — o intermediário é quem retém. O script aplica essa regra sozinho; seu esboço deve refletir corretamente.
 
 > ⚠️ **ATENÇÃO - REGRA CRÍTICA DE CARACTERES E QUEBRAS DE LINHA (ERRO 1057):**
 > O sistema de assinatura XML da Prefeitura de SP quebra e retorna o Erro 1057 se o payload JSON contiver acentuações, caracteres especiais (ç, ~, ^, ´) ou quebras de linha literais (`\n`) nos campos descritivos e razões sociais. Antes de enviar para o payload:
@@ -308,15 +309,22 @@ Para o Passo 5 acima, gere um `/tmp/dados_rps_XXX.json` unicamente para o atendi
 > 2. **NÃO** escreva valores de imposto/retenção dentro de `discriminacao`. A discriminação
 >    é só o texto descritivo do serviço (+ a `mensagem_padrao`, que o script anexa). Os
 >    números das retenções pertencem aos campos próprios, não ao corpo do texto.
-> 3. **PESSOA FÍSICA NÃO TEM RETENÇÃO.** Retenção na fonte (IRRF/PIS/COFINS/CSLL) só
->    existe quando o **tomador é PJ** (`indicador_tomador: 2`). Para PF (`1`), sem
->    identificação (`3`) ou exterior (`4`), o script **zera as retenções automaticamente**
->    e mantém apenas o **débito próprio** de PIS/COFINS (que independe do tomador). Reflita
->    isso no esboço financeiro: nota para PF não mostra linha de retenção.
->    - *Override raro:* PJ que comprovadamente não retém (ex.: optante do Simples) →
->      adicione `"tomador_retem": false` no JSON.
-> 4. **Confirmação visual:** após gerar o JSON, confira que ele tem `calcular_retencoes: true`
->    (PJ) e que nenhum valor de imposto foi parar na `discriminacao`.
+> 3. **RETENÇÃO DEPENDE DE QUEM PAGA (a fonte pagadora) SER PJ.** Há retenção na fonte
+>    (IRRF/PIS/COFINS/CSLL) quando:
+>    - o **tomador é PJ** (`indicador_tomador: 2`); **OU**
+>    - há um **intermediário do serviço** (bloco `intermediario` com CNPJ) — a operadora/
+>      plataforma que paga é a fonte pagadora e retém, **mesmo sem tomador identificado**
+>      (`indicador_tomador: 3`). É o caso de notas via operadora de plano, por exemplo.
+>
+>    **NÃO há retenção** quando o tomador é **PF** (`1`) ou exterior (`4`) **e não há
+>    intermediário**. Nesse caso o script mantém só o **débito próprio** de PIS/COFINS
+>    (que independe de quem paga) e zera as retenções. Reflita isso no esboço: nota de
+>    PF pura não mostra linha de retenção; nota com intermediário mostra.
+>    - *Override:* force com `"tomador_retem": true|false` no JSON (ex.: PJ optante do
+>      Simples que não sofre retenção → `false`).
+> 4. **Confirmação visual:** após gerar o JSON, confira que tem `calcular_retencoes: true`,
+>    que nenhum valor de imposto foi parar na `discriminacao`, e que o `intermediario` foi
+>    preenchido quando o pagamento vem via operadora/plataforma.
 
 > [!IMPORTANT]
 > **SANITIZAÇÃO OBRIGATÓRIA ANTES DE MONTAR O JSON (Erro "assinatura difere do calculado"):**

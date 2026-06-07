@@ -295,15 +295,21 @@ def construir_xml_lote(config, nota, assinatura_rps):
 
     itens_retencao = []
 
-    # REGRA FISCAL: retenção na fonte (IRRF, PIS, COFINS, CSLL, INSS) só ocorre
-    # quando o TOMADOR é Pessoa Jurídica (indicador_tomador == 2). Pessoa física
-    # (1), tomador sem identificação (3) e tomador no exterior (4) NÃO retêm
-    # tributos na fonte — Lei 10.833/2003 art. 30 (PCC) e RIR art. 714 (IRRF)
-    # se aplicam apenas entre pessoas jurídicas.
-    # Override opcional via JSON "tomador_retem": false (ex.: PJ optante do
-    # Simples Nacional que, em regra, não sofre retenção de PCC).
+    # REGRA FISCAL: retenção na fonte (IRRF, PIS, COFINS, CSLL, INSS) ocorre
+    # quando a FONTE PAGADORA é Pessoa Jurídica. A fonte pagadora é:
+    #   (a) o TOMADOR, se for PJ (indicador_tomador == 2); OU
+    #   (b) o INTERMEDIÁRIO do serviço, quando houver (ex.: operadora/plataforma
+    #       que paga pelo serviço e retém na fonte) — neste caso a retenção é
+    #       válida mesmo sem tomador identificado (indicador 3).
+    # Pessoa física (1) ou exterior (4) SEM intermediário NÃO retêm.
+    # Base: Lei 10.833/2003 art. 30 (PCC) e RIR art. 714 (IRRF) — aplicáveis
+    # quando quem paga é PJ.
+    # Override opcional via JSON "tomador_retem" (force true/false; ex.: PJ
+    # optante do Simples que não sofre retenção de PCC).
     tomador_eh_pj = nota.get('indicador_tomador') == 2
-    tomador_retem = nota.get('tomador_retem', tomador_eh_pj)
+    tem_intermediario = bool(limpa_documento(nota.get('intermediario', {}).get('cnpj', '')))
+    fonte_pagadora_pj = tomador_eh_pj or tem_intermediario
+    tomador_retem = nota.get('tomador_retem', fonte_pagadora_pj)
 
     if calcular and retencoes and tomador_retem:
         if retencoes.get('pis', 0) > 0:
