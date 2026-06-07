@@ -1,163 +1,146 @@
 # Robô de Notas Fiscais (NFS-e São Paulo) para OpenClaw
 
-Bem-vindo! Este pacote de arquivos foi criado para dar ao seu assistente virtual (OpenClaw) o "superpoder" de emitir, cancelar e baixar relatórios de Notas Fiscais diretamente no sistema da Prefeitura de São Paulo.
+Este pacote dá ao seu assistente virtual (OpenClaw) a capacidade de **emitir, cancelar e baixar relatórios** de Notas Fiscais de Serviço (NFS-e) direto no sistema da Prefeitura de São Paulo — tudo pelo chat, conversando em português.
 
-Você não precisa ser um programador para usar. Siga este passo a passo simples usando palavras do dia a dia para configurar sua clínica/empresa!
+Você **não precisa ser programador** para usar. O próprio robô faz a configuração com você, passo a passo.
 
 ---
 
-## 🎉 Novidades — Versão 2.0 (2026)
+## 📑 Índice
 
-Esta versão **adapta o robô às mudanças tributárias de 2026**. Foram duas frentes paralelas trabalhadas:
+- [Início rápido (instalação)](#-início-rápido-instalação)
+- [Configuração manual (avançado)](#️-configuração-manual-para-usuários-avançados)
+- [Novidades 2026 — a Reforma Tributária](#-novidades-2026--a-reforma-tributária)
+  - [Layout 1 (PCC) e Layout 2 (IBSCBS): qual usar](#qual-layout-usar--em-2026-é-você-quem-escolhe)
+  - [Os códigos fiscais do Layout 2 e como achá-los](#-os-códigos-fiscais-do-layout-2-e-como-achá-los)
+- [Documentação e fontes oficiais](#-documentação-e-fontes-oficiais)
 
-### ✅ Frente 1 — Layout PCC 2026 (Prefeitura SP) — EM PRODUÇÃO
+---
 
-A Prefeitura de São Paulo mudou a semântica dos campos de PIS, COFINS e CSLL na NFS-e a partir de **01/01/2026**. O robô agora emite no novo formato:
+## 🚀 Início rápido (instalação)
 
-| Campo | O que mudou |
+A forma mais fácil é deixar o **robô configurar tudo** — ele tem um assistente embutido. Não precisa abrir nenhum arquivo de código.
+
+### 1. Coloque a pasta no lugar certo
+Copie todos estes arquivos para a "Central de Habilidades" (Skills) do seu OpenClaw — normalmente em `workspace/skills/` (ex.: crie a pasta `faturamento_sp` lá dentro e ponha tudo nela).
+
+### 2. Chame o robô e deixe ele te guiar
+Abra o chat e diga algo como *"Emita uma nota"* ou *"Preciso testar a skill de nota fiscal"*. Na primeira vez, o robô percebe que ainda não está configurado e conduz a instalação:
+
+- **Instala as dependências** automaticamente (bibliotecas Python necessárias).
+- **Entrevista você** pelo chat: pede CNPJ, Inscrição Municipal, Código de Serviço e a alíquota de ISS. Se você não souber a alíquota, ele pesquisa e sugere.
+- **Prepara o arquivo de senha** (`.env`) e te orienta a preenchê-lo.
+
+### 3. Adicione seu Certificado Digital e a senha
+São as duas únicas etapas manuais, por segurança:
+
+- **Certificado:** copie seu arquivo `.p12` (ou `.pfx`) para dentro da pasta do projeto. O robô pergunta o nome do arquivo no chat.
+- **Senha:** ela mora num arquivo oculto chamado **`.env`** (começa com ponto). Abra-o num editor de texto e troque o lado direito do `=`:
+  ```
+  NFSE_CERT_PASSWORD=suasenhaverdadeira
+  ```
+  > 💡 No Mac, arquivos que começam com ponto ficam ocultos. Aperte `Command + Shift + .` para vê-los.
+  >
+  > 🔒 Por segurança, o robô **nunca lê** a sua senha — ele assume que você a preencheu e segue para a validação.
+
+### 4. Teste de validação ("Batismo de Fogo")
+Com certificado e senha no lugar, o robô faz automaticamente uma **emissão de teste de R$ 150,00** (modo teste, não gera nota real) para confirmar que a assinatura digital e a conexão com a Prefeitura funcionam. Passou no teste, você está pronto para emitir notas reais.
+
+### ⚙️ Configuração manual (para usuários avançados)
+Se preferir não usar o assistente, edite o **`config.json`** à mão:
+- Troque os campos `"MEUCNPJ"`, `"Minhainscricao"`, `"Meucodigo"` e `"MEUCertificado.p12"` pelos seus dados reais.
+- Em `"aliquota_servicos"`, use formato decimal (ex.: `0.02` para 2%).
+
+---
+
+## 🎉 Novidades 2026 — a Reforma Tributária
+
+A versão 2.0 adapta o robô às mudanças tributárias de 2026, em duas frentes — **ambas implementadas e validadas** contra a homologação da Prefeitura (`{"sucesso": true}`).
+
+### Frente 1 — Layout 1 com a nova sistemática PCC (em produção)
+
+Desde **01/01/2026**, a Prefeitura mudou o significado dos campos de PIS, COFINS e CSLL na NFS-e. O robô já emite no formato novo:
+
+| Campo | O que passou a significar |
 |---|---|
-| `<ValorPIS>` | Agora é o **débito próprio** do prestador (sempre preenchido). Lucro Presumido: 0,65% × valor |
-| `<ValorCOFINS>` | Agora é o **débito próprio** (sempre preenchido). Lucro Presumido: 3% × valor |
-| `<ValorCSLL>` | Agora é a **soma das retenções PCC** (PIS+COFINS+CSLL = 4,65%) quando houver retenção |
-| `<TipoRetencao>` | Anunciado pela Prefeitura, mas o webservice **ainda não aceita** (erro 1001). Implementado e desligado via flag |
+| `<ValorPIS>` | **Débito próprio** do prestador (sempre preenchido). Lucro Presumido: 0,65% |
+| `<ValorCOFINS>` | **Débito próprio** (sempre preenchido). Lucro Presumido: 3% |
+| `<ValorCSLL>` | **Soma das retenções** PIS+COFINS+CSLL (4,65%), quando há retenção |
+| `<TipoRetencao>` | Anunciado pela Prefeitura, mas o webservice ainda não aceita — mantido desligado por flag |
 
-**Status:** ✅ Validado contra o ambiente de homologação SP em 18/05/2026 (resposta da prefeitura: `"sucesso": true`).
+**Na prática para você:** suas notas saem normalmente; muda só a estrutura interna do XML, que agora permite à Receita cruzar seus débitos próprios com as retenções dos tomadores. Detalhes em [`SP_PCC_2026.md`](SP_PCC_2026.md).
 
-**O que isso significa para você:** Suas notas continuam saindo normalmente. A diferença é só na **estrutura interna do XML** — a Receita Federal agora consegue cruzar automaticamente seus débitos próprios com as retenções declaradas pelos tomadores.
+### Frente 2 — Layout 2 (IBSCBS): os novos impostos da Reforma
 
-Documentação técnica completa: [`SP_PCC_2026.md`](SP_PCC_2026.md)
+A Reforma Tributária (EC 132/2023 + LC 214/2025) cria dois impostos que substituirão os atuais:
 
-### ✅ Frente 2 — Reforma Tributária Federal (Layout 2 / IBSCBS) — IMPLEMENTADO E VALIDADO
+- **CBS** → substitui PIS + COFINS (federal)
+- **IBS** → substitui ISS + ICMS (estadual/municipal)
 
-A Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025) cria dois impostos novos que vão substituir os atuais:
+Os dois funcionam igual e andam juntos (por isso "IBSCBS" — o *IVA Dual* brasileiro). Na NFS-e aparecem no **Layout 2**. O emissor é o script **`emitir_nfse_v2.py`**, separado do `emitir_nfse.py`, e está **validado de ponta a ponta**.
 
-- **CBS** (Contribuição sobre Bens e Serviços) → substitui **PIS + COFINS** (federal)
-- **IBS** (Imposto sobre Bens e Serviços) → substitui **ISS + ICMS** (estados/municípios)
-
-Os dois funcionam igual (por isso vêm juntos: "IBSCBS"). É o **IVA Dual** brasileiro. Na NFS-e, aparecem no novo **Layout 2**, com a tag `<IBSCBS>`.
-
-**Status: ✅ implementado e validado 100% contra a homologação SP (07/06/2026 — `{"sucesso": true}`).**
-
-O emissor do Layout 2 é o script **`emitir_nfse_v2.py`** (separado do `emitir_nfse.py`). Ele:
-- Monta o RPS versão 2 completo (estrutura diferente: sem `<ValorServicos>`, com `<ValorFinalCobrado>`, `NBS`, `cLocPrestacao` e o grupo `<IBSCBS>`)
-- Gera a assinatura v2 (validada contra os 6 exemplos oficiais do manual — rode `python emitir_nfse_v2.py --selftest`)
-- **Valida o XML localmente contra o XSD oficial** antes de enviar (pasta `schemas_oficiais_sp/xsd_completo/`)
-- Envia com `VersaoSchema=2` no mesmo endpoint que já usamos
-
-**Qual layout usar — em 2026 é a SUA escolha:**
+### Qual layout usar — em 2026 é VOCÊ quem escolhe
 
 | Período | Regra |
 |---|---|
-| **2026** | **Os dois layouts são válidos** (posição oficial da Prefeitura SP). Você escolhe. O Layout 2 destaca IBS/CBS, mas em 2026 são valores **informativos** — você **não paga nada a mais** (LC 214 dispensa o recolhimento). |
-| **2027+** | **Layout 2 obrigatório** — CBS entra valendo, PIS/COFINS extintos |
+| **2026** | **Os dois layouts são válidos** (posição oficial da Prefeitura). O Layout 2 destaca IBS/CBS, mas como valores **informativos** — você **não paga nada a mais** (a LC 214 dispensa o recolhimento neste ano). |
+| **2027+** | **Layout 2 obrigatório** — a CBS passa a ser cobrada e o PIS/COFINS são extintos. |
 
-> 🤖 **O robô agora pergunta.** Ao pedir uma nota em 2026, o OpenClaw pergunta em qual layout você quer emitir (explicando os dois). Se você tiver uma preferência fixa, ele salva no `config.json` (campo `"layout_preferido": "1"` ou `"2"`) e para de perguntar. A partir de 2027 ele usa o Layout 2 automaticamente.
+> 🤖 **O robô pergunta qual layout usar** ao emitir uma nota em 2026. Se você definir uma preferência fixa, ele a salva no `config.json` (`"layout_preferido": "1"` ou `"2"`) e para de perguntar. A partir de 2027 ele usa o Layout 2 sozinho.
 
-**Vale a pena já usar o Layout 2 em 2026?** É opcional, mas um bom "ensaio" sem risco: você valida toda a integração (certificado, códigos, envio) antes da obrigatoriedade de 2027, sem pagar IBS/CBS. A abordagem **híbrida** (emitir real no Layout 1 + testar o Layout 2 em `--modo teste`) é a mais segura.
+**Vale antecipar o Layout 2 em 2026?** É opcional, mas um bom ensaio sem risco: valida toda a integração antes da obrigatoriedade de 2027, sem custo. A abordagem **híbrida** (emitir real no Layout 1 + testar o Layout 2 em modo teste) é a mais segura.
 
-**Marco crítico:** **01/01/2027** — quando a CBS começar a valer, o Layout 2 precisa estar em produção. Já está pronto.
+**Marco crítico: 01/01/2027** — quando o Layout 2 passa a ser obrigatório. Já está pronto para esse dia.
 
 ### 🔑 Os códigos fiscais do Layout 2 (e como achá-los)
 
-O Layout 2 exige 3 códigos que classificam o serviço para o IBS/CBS:
+O Layout 2 exige três códigos que classificam o serviço para o IBS/CBS:
 
-| Código | O que é | Onde fica no config |
+| Código | O que é | Onde fica |
 |---|---|---|
-| **NBS** | Nomenclatura Brasileira de Serviços (9 díg.) — "que serviço é" | `ibscbs.nbs` |
-| **cIndOp** | Indicador de operação (6 díg.) — "onde o imposto é devido" | `ibscbs.c_ind_op` |
-| **cClassTrib** | Classificação tributária (6 díg.) — "como tributa / tem redução" | `ibscbs.cclasstrib` |
+| **NBS** | Nomenclatura Brasileira de Serviços (9 díg.) — *que serviço é* | `config.json` → `ibscbs.nbs` |
+| **cIndOp** | Indicador de operação (6 díg.) — *onde o imposto é devido* | `ibscbs.c_ind_op` |
+| **cClassTrib** | Classificação tributária (6 díg.) — *como tributa / se tem redução* | `ibscbs.cclasstrib` |
 
-**Valores já configurados e validados para MEDICINA (item 04.01 da LC 116):**
+**Já configurados e validados para MEDICINA (item 04.01 da LC 116):**
 - `nbs = 123012200` (serviços médicos especializados)
 - `c_ind_op = 030101` (local da prestação)
-- `cclasstrib = 200029` (saúde humana, Anexo III — **com redução de alíquota**, não tributação integral!)
+- `cclasstrib = 200029` (saúde humana, Anexo III — **com redução de alíquota**)
 
-**Como achar para qualquer serviço** (tutorial passo a passo):
-1. Baixe o **Anexo VIII** (tabela de correlação) em [gov.br/nfse → documentação técnica → RTC](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc) — arquivo `anexoviii-correlacaoitemnbsindopcclasstrib_ibscbs_*.xlsx`. Já há uma cópia em [`schemas_oficiais_sp/`](schemas_oficiais_sp/).
-2. Abra a aba **"tabela geral"**
-3. Procure pelo **Item da LC 116** do seu serviço (medicina = grupo `04.xx`) ou pela descrição
-4. Leia as colunas **NBS**, **INDOP** (=cIndOp) e **cClassTrib**
-5. No `config.json`, tire os pontos do NBS (`1.2301.22.00` → `123012200`)
+**Como achar para qualquer serviço:**
+1. Abra o **Anexo VIII** (tabela de correlação), já arquivado em [`schemas_oficiais_sp/`](schemas_oficiais_sp/) ou baixe em [gov.br/nfse → documentação técnica → RTC](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc).
+2. Abra a aba **"tabela geral"**.
+3. Procure pelo **Item da LC 116** do seu serviço (medicina = grupo `04.xx`) ou pela descrição.
+4. Leia as colunas **NBS**, **INDOP** (=cIndOp) e **cClassTrib**.
+5. No `config.json`, escreva o NBS sem pontos (`1.2301.22.00` → `123012200`).
 
-> ⚠️ **Saúde tem redução de alíquota.** Médicos/clínicas usam `cClassTrib 200029` (saúde humana), **não** `000001` (integral). Usar o código errado paga imposto a mais. Os itens 04.01 (medicina) e 04.03 (clínica/hospital) têm a **mesma tributação** — só muda o NBS (descrição).
+> ⚠️ **Saúde tem redução de alíquota.** Médicos/clínicas usam `cClassTrib 200029`, **não** `000001` (tributação integral) — usar o código errado paga imposto a mais. Os itens 04.01 (medicina) e 04.03 (clínica/hospital) têm a **mesma tributação**; muda só o NBS.
 
-Documentação técnica completa: [`MIGRATION_RTC_2026.md`](MIGRATION_RTC_2026.md) e [`RTC_2026_README.md`](RTC_2026_README.md)
+---
 
-### 📚 Fontes oficiais arquivadas
+## 📚 Documentação e fontes oficiais
 
-Duas pastas guardam os documentos oficiais da Prefeitura/Receita (base normativa para qualquer alteração — snapshot de 06/2026):
-- [`fontes_oficiais_prefeitura/`](fontes_oficiais_prefeitura/) — manual do WebService v3.3, XSDs dos layouts 1 e 2, schemas assíncronos
-- [`schemas_oficiais_sp/`](schemas_oficiais_sp/) — XSDs v02 descompactados (para validação local) + **Anexo VIII** (tabela de correlação de códigos)
+**Guias internos:**
+- [`SP_PCC_2026.md`](SP_PCC_2026.md) — detalhes do Layout 1 / sistemática PCC
+- [`MIGRATION_RTC_2026.md`](MIGRATION_RTC_2026.md) e [`RTC_2026_README.md`](RTC_2026_README.md) — detalhes do Layout 2 / IBSCBS
 
-### 📂 Estrutura das branches
+**Fontes oficiais arquivadas** (base normativa, snapshot de 06/2026):
+- [`fontes_oficiais_prefeitura/`](fontes_oficiais_prefeitura/) — manual do WebService v3.3 e XSDs dos layouts 1 e 2
+- [`schemas_oficiais_sp/`](schemas_oficiais_sp/) — XSDs v02 (validação local) + **Anexo VIII** (tabela de correlação de códigos)
 
+**Como o robô se comporta** (definido em `SKILL.md`):
+- Pergunta qual layout usar e explica a diferença entre débito próprio e retenção
+- Monta o esboço financeiro com as retenções nos campos certos (nunca só no texto)
+- Aplica corretamente as regras de PF, PJ e intermediário de serviço
+- Valida a validade do certificado e avisa quando faltarem ≤ 30 dias para expirar
+- Reconhece os erros comuns da Prefeitura (260, 1001, 1050, 1056/1057, 1206, 630, 268) e sugere a correção
+
+### Estrutura das branches
 ```
-main                  ← TUDO: Layout 1 (PCC 2026, produção) + Layout 2 (validado, p/ 2027)
+main                  ← tudo: Layout 1 (produção) + Layout 2 (pronto p/ 2027)
 rtc-2026-layout-v2    ← histórico do desenvolvimento do Layout 2 (já consolidado na main)
 ```
 
-### 🤖 Comportamento do robô
-
-O `SKILL.md` foi atualizado para que o OpenClaw:
-1. **Saiba explicar** a diferença entre débito próprio e retenção para o usuário
-2. **Mostre o esboço financeiro 2026** com PIS/COFINS de débito próprio sempre visíveis
-3. **Avise mensalmente** sobre a branch RTC em standby (sem você precisar lembrar)
-4. **Valide proativamente a expiração do certificado** (≤30 dias avisa para renovar)
-5. **Tenha catálogo de erros conhecidos** (260, 1001, 1050, 1056/1057, 1206) com solução sugerida
-
 ---
 
-## 🛠️ Instalação Passo a Passo (Para Leigos)
-
-### 1. Onde colocar a pasta do projeto?
-Para que o seu robô (OpenClaw) entenda e adote essas funções financeiras, você deve colocar todos estes arquivos dentro da "Central de Habilidades" (Skills) do seu Agente.
-- Geralmente, fica na pasta `workspace/skills/` (por exemplo: crie uma pasta chamada `faturamento_sp` lá dentro e jogue todos os arquivos nela).
-
-### 2. A Mágica do "Wizard Automático" (Mais Fácil! ✨)
-Sabe a parte chata de configurar arquivos cheios de códigos e números? **O seu robô agora faz isso por você!**
-Nós programamos um *Assistente de Instalação (Wizard)* embutido.
-
-Se você não quer mexer em nenhum arquivo de texto, basta fazer o seguinte:
-1. Abra o chat do seu OpenClaw.
-2. Diga a ele algo como: *"Emita uma Nota"* ou *"Preciso testar a skill de nota fiscal"*.
-3. **Imediatamente**, o robô perceberá que este é seu primeiro acesso e iniciará os preparativos:
-    *   **Auto-Instalação:** Ele rodará as ferramentas necessárias automaticamente para garantir que seu Python esteja pronto.
-    *   **Entrevista:** Ele perguntará pelo chat o seu CNPJ, Inscrição Municipal, Código de Serviço e a sua **Alíquota de ISS** (Se você não souber o imposto, ele pesquisa no Google para você!).
-    *   **Segurança:** Ele criará o arquivo secreto para a sua senha e pedirá para você preenchê-lo manualmente por segurança.
-4. **Respeito à Privacidade:** O robô nunca lê a sua senha no arquivo `.env`. Ele confia que você a inseriu e pula direto para a validação!
-
----
-
-### 3. O Passo Final: O "Batismo de Fogo" 🔥
-Assim que você configurar seu Certificado e Senha (conforme os Passos 4 e 5 abaixo), o robô não encerrará a conversa até realizar um **Faturamento Teste de R$ 150,00**. 
-- Isso serve para garantir que a sua assinatura digital está funcionando perfeitamente e que a prefeitura de São Paulo aceita a sua conexão. Só depois desse teste bem-sucedido é que o sistema é liberado para notas reais!
-
----
-
-### 4. Onde coloco o meu Certificado Digital?
-Você precisará do seu certificado digital (aquele arquivo `.p12` ou `.pfx` concedido pelo governo ou seu contador).
-- Pegue o seu próprio arquivo e **cole-o dentro da pasta** onde estão o resto dos arquivos do projeto. O robô perguntará o nome do arquivo para você lá no chat para salvar no seu perfil!
-
-### 5. Onde eu coloco a SENHA do meu Certificado?
-No mundo dos desenvolvedores, colocar senha mestra diretamente no chat ou em arquivos tradicionais é perigoso. Por isso, a sua senha vai morar num arquivo "secreto" e seguro chamado **`.env`** (Sim, ele começa com um ponto final mesmo!).
-
-- Abra esse arquivo `.env` usando o Bloco de Notas ou o editor de texto do seu computador.
-- Você verá um texto assim: `NFSE_CERT_PASSWORD=SUA_SENHA_AQUI_NAO_COLOQUE_NO_GITHUB`
-- Apague toda a frase da direita e digite a sua verdadeira senha **colada** ao sinal de Igual `=`.
-- Ficará assim: `NFSE_CERT_PASSWORD=senha123` (Salve e feche).
-
-*(Dica: Computadores Mac costumam esconder da sua visão arquivos que começam com um ponto. Se você não estiver vendo o `.env` ou o `.gitignore`, aperte `Command + Shift + .` (Ponto) para o seu Mac revelar os arquivos ocultos!)*
-
----
-
-### ⚠️ Método Alternativo: Configuração Manual (Para usuários avançados)
-Se, por qualquer motivo, você não quiser conversar com o robô para ele preencher os dados, você pode fazer "na mão":
-- Abra o arquivo **`config.json`**.
-- Troque os campos `"MEUCNPJ"`, `"Minhainscricao"`, `"Meucodigo"`, e `"MEUCertificado.p12"` pelos seus dados reais.
-- No campo `"aliquota_servicos"`, use o formato decimal (ex: `0.02` para 2%).
-
-### 🚀 6. Pronto pra Voar!
-A sua personalização está 100% terminada.
-Agora, no seu OpenClaw, o arquivo "Mestre" robótico chamado `SKILL.md` fará o elo do sistema.
-
-Basta abrir a janela de chat do robô e dizer: *"Emita uma Nota de R$ 38.000,00 para a Clínica Exemplo usando a skill de nota fiscal!"*. A IA resgatará este manual, lerá os seus bloqueios e as senhas nas sombras e lhe devolverá pelo próprio chat o Link definitivo e impresso com sucesso validado em São Paulo!
+Para emitir, é só pedir no chat — por exemplo: *"Emita uma nota de R$ 1.500 para a AMIL"*. O robô cuida do cálculo dos impostos, monta a nota, pede sua aprovação e devolve o link do PDF oficial da Prefeitura.
