@@ -165,6 +165,10 @@ Sempre que o usuário solicitar uma ação financeira pela primeira vez (ou se n
 - Incremente o `contador_rps.txt` (+1) imediatamente.
 - Exclua o `/tmp/dados_rps_X.json` ao final, para manter o sistema limpo.
 
+> **Flags de teste (ambos os scripts aceitam):**
+> - `--modo teste` → envia para o ambiente de **homologação** da Prefeitura (valida tudo, mas **não emite** nota real).
+> - `--dry-run` → monta e assina o XML **localmente** e **não envia nada** (nem para homologação). Útil para conferir o XML/payload sem rede. **Em teste/dry-run, NUNCA incremente o `contador_rps.txt`.**
+
 **6. Entrega:** leia a saída JSON (Seção 5) e devolva ao usuário: o sucesso, o **número da NF-e** e a **URL oficial do PDF**. Como a Prefeitura bloqueia o envio público, invoque a **Skill GOG (e-mails)** para enviar o link do PDF ao próprio e-mail do usuário. Se o tomador for novo e aprovado, salve-o no `tomadores.json`.
 
 ---
@@ -175,9 +179,11 @@ Para o passo 5, gere um `/tmp/dados_rps_XXX.json` exclusivo para o atendimento.
 
 > [!IMPORTANT]
 > **SANITIZAÇÃO OBRIGATÓRIA (evita o erro de assinatura / 1057).**
-> A Prefeitura valida a assinatura comparando o XML com um digest interno; acentos e quebras de linha quebram essa comparação. Antes de escrever qualquer campo de texto:
+> A Prefeitura valida a assinatura comparando o XML com um digest interno; acentos e quebras de linha quebram essa comparação. A regra vale para **os campos que VOCÊ (agente) preenche no JSON**:
 > 1. **Remova acentos e `ç`** de `razao_social_tomador`, `discriminacao` e campos de endereço (`logradouro`, `complemento`, `bairro`). Ex.: `SAÚDE → SAUDE`, `SERVIÇOS → SERVICOS`.
 > 2. **Remova quebras de linha** (`\n`, `\r`) da `discriminacao`, juntando tudo em um parágrafo único.
+>
+> A `mensagem_padrao` do `config.json` (texto fixo que o script anexa à discriminação) é responsabilidade do config — não precisa sanitizá-la a cada nota; se ela causar erro de assinatura, ajuste-a uma vez no `config.json`.
 
 > [!IMPORTANT]
 > **RETENÇÕES VÃO NOS CAMPOS PRÓPRIOS — nunca apenas no texto.**
@@ -200,14 +206,17 @@ Para o passo 5, gere um `/tmp/dados_rps_XXX.json` exclusivo para o atendimento.
   "indicador_tomador": 2, // 2=CNPJ (PJ, retém) | 1=CPF (PF, não retém sem intermediário) | 3=Sem ID | 4=NIF/exterior
   "documento_tomador": "<Apenas_Numeros>",
   // "tomador_retem": false,  // (opcional) só p/ PJ que não retém, ex. Simples Nacional
-  "razao_social_tomador": "<Nome_Empresa>",
+  "razao_social_tomador": "<Nome_ou_Razao_Social_SEM_ACENTOS>",
   "email_tomador": "<Email_Cliente>",
+  // endereco_tomador: OBRIGATÓRIO só para tomador PJ (CNPJ). Para PF (CPF),
+  // OMITA o bloco inteiro se não tiver o endereço — NUNCA invente dados falsos.
   "endereco_tomador": {
       "logradouro": "RUA X", "numero": "123", "bairro": "VILA Y", "cidade": "3550308", "uf": "SP", "cep": "00000000"
   },
-  "discriminacao": "<Texto_do_servico>"
+  "discriminacao": "<Texto_do_servico_SEM_ACENTOS>"
 }
 ```
+> **Endereço:** inclua o bloco `endereco_tomador` para **PJ (CNPJ)**. Para **PF (CPF)**, ele é opcional — se o usuário não informou o endereço, **omita o bloco** (não preencha com "NAO INFORMADO" nem dados inventados).
 
 ### Modelo B — SEM tomador identificado, COM intermediário
 Para serviços pagos por **operadora/plataforma** (ex.: plano de saúde), sem tomador final identificado. O **intermediário é a fonte pagadora PJ e retém** — por isso `calcular_retencoes` segue `true`.
