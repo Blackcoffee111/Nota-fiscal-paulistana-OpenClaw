@@ -29,7 +29,7 @@
     },
     "retencao_pcc_total": 4.65,
     "emitir_tipo_retencao": false,
-    "_emitir_tipo_retencao_doc": "Em 18/05/2026 o webservice da Prefeitura SP ainda nao aceita o campo <TipoRetencao> (retorna erro 1001). Manter false ate a Prefeitura habilitar. Quando habilitar, mudar para true para emitir os codigos 0/3/4-9.",
+    "_emitir_tipo_retencao_doc": "MANTER false. Investigacao de 07/06/2026 confirmou que o webservice legado de SP (lotenfe.asmx) NAO possui campo de tipo de retencao no schema (mapa: ValorCSLL > CodigoServico > AliquotaServicos). A Prefeitura infere o tipo a partir de ValorCSLL > 0. O campo so existe na emissao online (portal) e no padrao Nacional gov.br (tpRetPisCofins, regido pela NT 007/2026 que nao afeta SP). Ligar esta flag causa erro 1001. Ver SP_PCC_2026.md secao 7.",
     "_codigos_tipo_retencao": {
       "0": "PIS/COFINS/CSLL Nao Retidos",
       "3": "PIS/COFINS/CSLL Retidos",

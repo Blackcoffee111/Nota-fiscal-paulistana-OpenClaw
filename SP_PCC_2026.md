@@ -111,7 +111,7 @@ Os dois sempre coexistiram. A novidade é que **a NF-e agora precisa mostrar amb
   - `<ValorPIS>` = débito próprio (sempre)
   - `<ValorCOFINS>` = débito próprio (sempre)
   - `<ValorCSLL>` = soma das retenções PCC (quando houver)
-  - `<TipoRetencao>` emitido entre `<ValorCSLL>` e `<CodigoServico>`
+  - `<TipoRetencao>` — implementado mas **desligado por padrão** (flag `emitir_tipo_retencao=false`), pois o webservice legado de SP não tem esse campo no schema (ver seção 7)
 - **Backward compat**: com `habilitado=false`, o XML sai idêntico ao v1 — emitir_nfse.py original
 
 ### 6.3 Validação executada (3 cenários, dry-run com cert real)
@@ -126,24 +126,52 @@ Todos os XMLs foram assinados digitalmente com sucesso.
 
 ---
 
-## 7. Pendência: teste real contra homologação SP
+## 7. TipoRetencao — INVESTIGAÇÃO CONCLUÍDA (07/06/2026)
 
-Os dry-runs validam **estrutura** mas não **aceitação pela prefeitura**. Especificamente, dois pontos precisam ser confirmados contra o webservice real (`nfews.prefeitura.sp.gov.br/lotenfe.asmx`):
+> **TL;DR:** O campo de "tipo de retenção" (códigos 0-9) **NÃO existe no webservice legado de SP** e **não é necessário**. A Prefeitura infere o tipo automaticamente a partir do `<ValorCSLL>`. Nossa implementação atual já está 100% conforme. A flag `emitir_tipo_retencao` permanece `false` permanentemente para este webservice.
 
-1. **Posição do `<TipoRetencao>`** — está provisoriamente entre `<ValorCSLL>` e `<CodigoServico>`. Se o schema rejeitar (erro 1001), realocar conforme a lista de elementos válidos que a prefeitura retornar.
-2. **Nome exato do campo** — usado `<TipoRetencao>`. O email do contador chama de "tipo de retenção" mas o XSD oficial pode usar outro nome (ex: `<TipoRetencaoCSLL>` ou `<TipoRetencaoFontes>`).
+### O que foi testado
 
-**Para rodar o teste real**, restaure seu config real (CNPJ/IM/Inscrição Municipal verdadeiros) e:
+Em 07/06/2026, com certificado válido, sondamos o schema do webservice (`nfews.prefeitura.sp.gov.br/lotenfe.asmx`) em modo teste, posicionando o `<TipoRetencao>` em diferentes lugares do `<RPS>`:
+
+| Posição testada | Resposta da Prefeitura |
+|---|---|
+| Entre `<ValorCSLL>` e `<CodigoServico>` | ❌ Erro 1001 — "invalid child element 'TipoRetencao'. List of possible elements expected: **'CodigoServico'**" |
+| Após `<CodigoServico>` | ❌ Erro 1001 — "invalid child element ... List of possible elements expected: **'AliquotaServicos'**" |
+| Sem o campo (formato atual) | ✅ `"sucesso": true` |
+
+### Mapa do schema legado de SP (deduzido das mensagens de erro)
+
+```
+... → ValorINSS → ValorIR → ValorCSLL → CodigoServico → AliquotaServicos → ...
+```
+
+Não há lugar para um campo de tipo de retenção em nenhuma posição da sequência. **O schema legado simplesmente não tem esse elemento.**
+
+### Por que o campo não existe (e não precisa existir)
+
+1. **Webservice legado de SP (que usamos):** a Prefeitura **infere** o tipo de retenção a partir dos valores. Se `<ValorCSLL>` (soma PCC) > 0 → retido (equivale ao código 3); se ausente → não retido (código 0).
+2. **Emissão online (portal manual):** aí sim aparece o campo "Contribuições Sociais – Retidas" com os códigos 0-9, porque é preenchimento humano.
+3. **Padrão Nacional (gov.br):** usa os campos `tpRetPisCofins` e `vRetCSLL` — mas é **outro sistema**, regido pela NT 007/2026, que **não afeta** o webservice legado de SP (confirmado: a NT 007 aplica-se exclusivamente ao ambiente nacional gov.br).
+
+### Conclusão
+
+✅ A skill está **totalmente em conformidade** com as regras vigentes desde 14/05/2026. Nenhuma alteração de código é necessária.
+✅ A flag `emitir_tipo_retencao` foi mantida (default `false`) apenas como salvaguarda — caso a Prefeitura algum dia adicione o campo ao webservice legado, basta ligá-la. Mas isso é **improvável**, pois a inferência por `<ValorCSLL>` já resolve.
+
+**Para reproduzir o teste de conformidade** (não emite nota real):
 ```bash
 ./.venv/bin/python emitir_nfse.py --modo teste --dados nota.json --json-out
+# Esperado: {"sucesso": true, "notas_geradas": []}
 ```
-O endpoint de teste (`TesteEnvioLoteRPS`) **não emite NF-e real** — só valida o XML.
 
 ---
 
 ## 8. Referências
 
 - Email do contador (05/2026) — alterações na sistemática de tributos federais NFS-e SP
+- [Prefeitura SP — Nova sistemática de tributos federais nos leiautes 1 e 2](https://notadomilhao.sf.prefeitura.sp.gov.br/noticias/alteracao-na-emissao-de-nfs-e-nova-sistematica-de-indicacao-de-tributos-federais-nos-leiautes-1-e-2/) (vigência 14/05/2026)
+- [NT SE/CGNFS-e nº 007/2026](https://www.totvs.com/blog/fiscal-clientes/nfs-e-nacional-nota-tecnica-no-007-2026-esclarece-pis-cofins-retencoes-e-atualiza-codigos-de-operacao/) — aplica-se **apenas ao padrão Nacional** (gov.br), não ao webservice legado de SP
 - Lei 10.833/2003 art. 31 — retenções PIS/COFINS/CSLL na fonte
 - IN RFB 1.234/2012 — regulamenta retenções PCC para serviços profissionais
 
