@@ -2,6 +2,8 @@
 description: Faturamento NFS-e SP (Emissão e Cancelamento de Notas Fiscais em São Paulo)
 ---
 
+<!-- Discriminação padrão: SERVIÇOS PRESTADOS PELOS PRÓPRIOS SÓCIOS NO EXERCÍCIO DE PROFISSÃO REGULAMENTADA POR LEGISLAÇÃO FEDERAL, ISENTO DA RETENÇÃO DO INSS CONFORME PREVISTO NO ART. 120, INCISO III, § 2º DA IN/RFB Nº 971/2009. -->
+
 # Habilidade de Faturamento NFS-e SP (OpenClaw)
 
 Esta documentação define o comportamento e as arquiteturas da Skill de faturamento para emitir e cancelar Notas Fiscais de Serviços Eletrônica (NFS-e) da Prefeitura de São Paulo.
@@ -66,6 +68,10 @@ Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
 **1. Recepção de Pedido:** O usuário pedirá a nota (Valor e Tomador). Ex: "Nota de 1500 para a AMIL".
 **2. Triagem Local (`tomadores.json`):** Leia o arquivo `tomadores.json` em background. Se o Tomador já estiver cadastrado, puxe o CNPJ, endereço e e-mail de lá. Se for inédito, peça ao usuário os dados faltantes.
 **3. Simulação Financeira (Draft):** Calcule os impostos internamente cruzando com as regras do `config.json`. Responda ao usuário com um "Esboço" detalhado (Valor Bruto, valor de cada retenção aplicada, Total Líquido e Preview da Discriminação da nota).
+> ⚠️ **ATENÇÃO - REGRA CRÍTICA DE CARACTERES E QUEBRAS DE LINHA (ERRO 1057):**
+> O sistema de assinatura XML da Prefeitura de SP quebra e retorna o Erro 1057 se o payload JSON contiver acentuações, caracteres especiais (ç, ~, ^, ´) ou quebras de linha literais (`\n`) nos campos descritivos e razões sociais. Antes de enviar para o payload:
+> - Remova **TODOS** os acentos e "ç" da Razão Social do Tomador e da Discriminação (ex: "SAÚDE" -> "SAUDE", "SERVIÇOS" -> "SERVICOS").
+> - Remova quebras de linha (`\n`) da Discriminação, juntando todo o texto em um único parágrafo contínuo.
 **4. Oitiva Humana:** Pergunte se o usuário "Aprova o Faturamento".
 **5. Emissão e RPS:** 
    * Se aprovado, leia `contador_rps.txt` para pegar o próximo número sequencial X.

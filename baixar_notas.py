@@ -179,6 +179,7 @@ def consultar_periodo(config, data_inicio, data_fim):
                 "valor_ir": get_float('.//ValorIR'),
                 "valor_csll": get_float('.//ValorCSLL'),
                 "valor_iss": get_float('.//ValorISS'),
+                "discriminacao": get_text('.//Discriminacao'),
                 "tomador": {
                     "documento": get_text('.//CPFCNPJTomador/CNPJ') or get_text('.//CPFCNPJTomador/CPF'),
                     "razao_social": get_text('.//RazaoSocialTomador'),

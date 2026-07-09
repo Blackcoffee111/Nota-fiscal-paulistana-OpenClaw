@@ -6,6 +6,11 @@ __pycache__/
 # Arquivos Sensíveis (NUNCA SUBIR PARA O GITHUB)
 *.p12
 .env
+# Notas fiscais reais (PDFs), backups de código e extratos/listas locais
+NFSe_*.pdf
+*.bak
+resposta_*.xml
+tomadores_preferenciais.txt
 
 # Arquivos de Debug e Temporários
 debug_*.xml
