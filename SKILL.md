@@ -6,102 +6,195 @@ description: Faturamento NFS-e SP (Emissão e Cancelamento de Notas Fiscais em S
 
 # Habilidade de Faturamento NFS-e SP (OpenClaw)
 
-Esta documentação define o comportamento e as arquiteturas da Skill de faturamento para emitir e cancelar Notas Fiscais de Serviços Eletrônica (NFS-e) da Prefeitura de São Paulo.
+Esta skill permite ao agente **emitir, cancelar e consultar** Notas Fiscais de Serviço eletrônicas (NFS-e) da Prefeitura de São Paulo, conversando com o usuário em português.
 
-> **Importante:** Todos os arquivos descritos abaixo devem estar contidos na mesma pasta desta Skill (ex: `workspace/skills/nfse-sp/`).
+> **Todos os arquivos da skill devem estar na mesma pasta** (ex.: `workspace/skills/nfse-sp/`).
+
+> ## 🗂️ DOIS LAYOUTS COEXISTEM — pergunte ao usuário qual usar
+>
+> | Layout | Script | Quando | Status |
+> |---|---|---|---|
+> | **Layout 1** (só ISS + PCC) | `emitir_nfse.py` | Válido em 2026; não destaca IBS/CBS | ✅ Validado |
+> | **Layout 2** (com IBSCBS) | `emitir_nfse_v2.py` | Válido em 2026 (IBS/CBS informativos); **obrigatório em 2027** | ✅ Validado |
+>
+> Em **2026 os dois são válidos** (posição oficial da Prefeitura) e o destaque de IBS/CBS é **facultativo** — a LC 214/2025 dispensa o *recolhimento* este ano. **A decisão de qual layout usar é tomada no "PASSO ZERO" da Seção 1** (que manda perguntar ao usuário quando não houver preferência). A partir de **2027 o Layout 2 é obrigatório**.
+
+---
 
 ## 📁 Arquivos do Ecossistema
-1. `emitir_nfse.py` - Script de emissão em produção (gera o XML SOAP, encripta e envia).
-2. `cancelar_nfse.py` - Script de cancelamento de notas (criptografa o cancelamento).
-3. `config.json` - Retenções e alíquotas da clínica (ex: ISS, IRRF, limites, etc).
-4. `tomadores.json` - Tabela de dados de clientes recorrentes (sua agenda).
-5. `contador_rps.txt` - Arquivo de controle rigoroso para a sequência do talão.
-6. `Certificados.p12` - Chave criptográfica municipal (JAMAIS EXPOR).
-7. `.env` - Arquivo oculto onde você lerá a variável `NFSE_CERT_PASSWORD=senha`.
-8. `baixar_notas.py` - Script paginado de extração de relatórios e balanços contábeis da clínica.
+| # | Arquivo | Função |
+|---|---|---|
+| 1 | `emitir_nfse.py` | **Emissor do Layout 1** (PCC 2026) — monta o XML SOAP, assina e envia |
+| 2 | `emitir_nfse_v2.py` | **Emissor do Layout 2** (IBSCBS) — pronto para 2027. Tem `--selftest` e validação local contra XSD |
+| 3 | `cancelar_nfse.py` | Cancelamento de notas |
+| 4 | `baixar_notas.py` | Extração de relatórios/extratos contábeis (consulta paginada) |
+| 5 | `config.json` | Dados da empresa, retenções, alíquotas, bloco `pcc_2026` (Layout 1) e bloco `ibscbs` (Layout 2) |
+| 6 | `tomadores.json` | Cadastro de clientes recorrentes (agenda) |
+| 7 | `contador_rps.txt` | Controle da sequência do talão (número do RPS) |
+| 8 | `Certificados.p12` | Chave criptográfica municipal (**JAMAIS EXPOR**) |
+| 9 | `.env` | Arquivo oculto com a variável `NFSE_CERT_PASSWORD=senha` |
+| 10 | `SP_PCC_2026.md` | Documentação do Layout 1 / sistemática PCC |
+| 11 | `MIGRATION_RTC_2026.md`, `RTC_2026_README.md` | Documentação do Layout 2 / IBSCBS |
+| 12 | `schemas_oficiais_sp/` | XSDs oficiais v02 (validação local) + **Anexo VIII** (tabela de códigos NBS/cIndOp/cClassTrib) |
+| 13 | `fontes_oficiais_prefeitura/` | Manual do WebService v3.3 e XSDs oficiais arquivados |
 
 ---
 
-## ✨ 0. O Wizard de Instalação (Health Check Automático)
-Sempre que o usuário solicitar qualquer ação financeira pela primeira vez (ou se você notar que há algo faltando), você **deve** fazer um check-up silencioso lendo o arquivo `config.json`.
-Se os campos contiverem palavras-chave genéricas como `"MEUCNPJ"`, `"Minhainscricao"`, `"MEUCertificado.p12"` ou o valor **`0.0`** no campo `aliquota_servicos`, significa que o usuário acabou de instalar sua Skill e é um humano leigo. 
+## 🗓️ Contexto Tributário 2026 (LEIA ANTES DE EMITIR)
 
-Neste caso, pause a tarefa dele e inicie um **Wizard de Instalação Interativo e Amigável** no chat:
-0. **Check de Dependências (Obrigatório):** Antes de tudo, rode no terminal `pip install -r requirements.txt` para garantir que as bibliotecas `requests`, `lxml`, `signxml`, `cryptography` e `python-dotenv` estejam presentes. **Não tente emitir sem garantir o sucesso desta instalação.**
-1. Diga que percebeu que é a primeira vez dele e peça, um por vez, os dados faltantes: O CNPJ, a Inscrição Municipal, o Código de Serviço e a **Alíquota de Serviços (ISS)**.
+A partir de 2026 há **duas frentes de mudança** em paralelo. Conheça ambas para responder ao usuário e calcular os valores certos.
+
+### Frente 1 — Layout 1 com a sistemática PCC ✅ em vigor
+
+Mudança da Prefeitura SP no significado dos campos de tributos federais, vigente desde **01/01/2026** (validada na homologação: `"sucesso": true`). Já implementada no `emitir_nfse.py`:
+
+| Campo XML | Antes (até 2025) | Agora (2026+) |
+|---|---|---|
+| `<ValorPIS>` | Valor retido (só se houvesse retenção) | **Débito próprio** — sempre preenchido (Lucro Presumido: 0,65%) |
+| `<ValorCOFINS>` | Valor retido | **Débito próprio** — sempre preenchido (3%) |
+| `<ValorCSLL>` | Retenção de CSLL apenas (1%) | **Soma das retenções PCC** (PIS+COFINS+CSLL = 4,65%), quando há retenção |
+| `<ValorIR>` | IRRF retido (1,5%) | Inalterado |
+| `<TipoRetencao>` | Não existia | Anunciado, mas o webservice **ainda não aceita** — desligado pela flag `pcc_2026.emitir_tipo_retencao=false` |
+
+**Conceitos que você deve saber explicar:**
+- **Débito próprio** = imposto que o prestador apura e paga por conta própria (DARF mensal). Independe de quem é o tomador.
+- **Retenção** = imposto que a fonte pagadora desconta e recolhe em nome do prestador (vira crédito antecipado dele).
+- A retenção PCC (4,65%) feita por operadoras/clientes PJ **quita** o PIS/COFINS próprios do mês; a CSLL pode deixar diferença trimestral.
+
+### Frente 2 — Layout 2 (IBSCBS / Reforma Federal) ✅ implementado
+
+Reforma Tributária do Consumo (EC 132/2023 + LC 214/2025): cria **CBS** (substitui PIS/COFINS) e **IBS** (substitui ISS/ICMS), no grupo XML `<IBSCBS>`. Emissor: `emitir_nfse_v2.py` (Seção 7).
+
+- Validado contra o XSD oficial e a homologação SP (`"sucesso": true`), no mesmo endpoint, com `VersaoSchema=2`.
+- Em 2026 os valores de IBS/CBS são informativos e **não há recolhimento** (LC 214) — por isso o Layout 1 segue plenamente válido.
+- **Cronograma:** 2026 ano-teste → 2027 CBS valendo e PIS/COFINS extintos → 2029-2032 transição ISS→IBS → 2033 IBS pleno.
+
+### Resumo prático (situação → ação)
+
+| Situação | Ação |
+|---|---|
+| Pedido de emissão | Resolva o **PASSO ZERO** (Seção 1): qual layout. Em 2026, pergunte se não houver preferência |
+| Usuário pergunta sobre IBSCBS / Reforma | Implementado e pronto; em 2026 sem recolhimento (LC 214); obrigatório em 2027 |
+| "Por que `ValorPIS` aparece sem retenção?" | É o **débito próprio**, em vigor desde 2026 |
+| "Por que `ValorCSLL` está maior?" | Agora é a **soma PCC** (4,65%), não só CSLL (1%) |
+| Montar o payload de uma nota | **Sempre** `calcular_retencoes: true`; **nunca** escreva retenção na `discriminacao` (Seção 2) |
+| Nota para **PF sem intermediário** | Sem retenção — só débito próprio. O script zera IRRF/PCC; o esboço não mostra retenção |
+| Nota **sem tomador, com intermediário** (operadora) | **Tem retenção** — o intermediário é a fonte pagadora PJ. Preencha o bloco `intermediario` (Seção 2, Modelo B) |
+| PJ que não retém (ex.: Simples) | Adicione `"tomador_retem": false` no JSON |
+| Erro 1001 citando `<TipoRetencao>` | Confirme que `emitir_tipo_retencao` está `false` no config |
+| Usuário não sabe o NBS/cIndOp/cClassTrib | Consulte o Anexo VIII (Seção 7) |
+
+---
+
+## 0. Wizard de Instalação (primeiro uso)
+
+Sempre que o usuário solicitar uma ação financeira pela primeira vez (ou se notar algo faltando), faça um check-up silencioso lendo o `config.json`. Se houver palavras-chave genéricas (`"MEUCNPJ"`, `"Minhainscricao"`, `"MEUCertificado.p12"`) ou `aliquota_servicos` = `0.0`, o usuário acabou de instalar a skill. Pause a tarefa e inicie um **Wizard de Instalação amigável**:
+
+0. **Dependências (obrigatório):** rode `pip install -r requirements.txt` para garantir `requests`, `lxml`, `signxml`, `cryptography` e `python-dotenv`. **Não emita sem esta instalação bem-sucedida.**
+1. Diga que percebeu ser a primeira vez e peça, um por vez: CNPJ, Inscrição Municipal, Código de Serviço e a **Alíquota de ISS**.
 
 > [!IMPORTANT]
-> **BLOQUEIO DE SEGURANÇA NA ALÍQUOTA:**
-> Você deve obrigatoriamente aguardar a resposta do usuário sobre a alíquota. 
-> * **Proibido Avançar:** Não use o valor padrão de 2% (0.02) por conta própria caso o arquivo contenha 0.0 ou 0.
-> * **Ação Necessária:** Pergunte: *"Qual a alíquota de imposto municipal (ISS) para o seu código de serviço? Posso ajudá-lo a descobrir se não souber."*
-> * **Ajuda Ativa:** Se ele não souber, use sua habilidade de pesquisa (Google) cruzando o Código de Serviço dele com as alíquotas de São Paulo e sugira: *"Encontrei que para o serviço X a alíquota em SP costuma ser Y%. Confirma este valor?"*
-> * **Condição de Saída:** Você só pode seguir para o faturamento ou para o próximo passo se o usuário digitar um número ou disser "Sim/Confirmo" para sua sugestão.
-3. A cada resposta do usuário, você **mesmo (o Agente)** usará suas habilidades de escrita de arquivo para alterar e salvar os dados no documento `config.json` por ele.
-4. **Ato Autônomo com o .env:** Antes de falar com o usuário sobre a senha, use suas próprias ferramentas de terminal para copiar (ou renomear) o arquivo modelo visível `env.example` para `.env` (oculto com ponto) na pasta. Deixe este arquivo preparado para receber a senha.
-5. **Privacidade Rigorosa do .env:** Por razões de segurança e proteção de senhas bancárias, você (o Agente) **JAMAIS** deve ler o conteúdo do arquivo `.env` para conferir se o usuário já preencheu a senha. 
-   - Sempre parta do princípio de que a senha foi inserida conforme orientado. 
-   - Comunique ao usuário explicitamente: *"Por sua segurança, eu não tenho permissão para ler seu arquivo .env e ver sua senha. Vou acreditar que você já a inseriu e seguiremos com o teste!"*
-6. Quando tudo isso acabar e o `.env` oculto estiver pronto, informe-o sobre a etapa final de segurança (A Senha e o Certificado) orientando-o exatamente desta forma:
-> *"Pronto, preenchi os dados da sua empresa e preparei o terreno! Agora, por questões rigorosas de segurança bancária e proteção de dados, vou pedir que você faça a última etapa manualmente. Abra a pasta técnica deste projeto no seu computador (geralmente em `~/.openclaw/workspace/skills/`). Arraste para lá o seu arquivo de certificado real (ex: `Certificado.p12`). Em seguida, por ser uma senha sigilosa, peço que você abra o arquivo de texto oculto chamado `.env` (se vc usa Mac, aperte `Command + Shift + .` para ver os arquivos ocultos). Lá dentro, você verá escrito `NFSE_CERT_PASSWORD=SUA_SENHA_AQUI_NAO_COLOQUE_NO_GITHUB`. Apague tudo o que está do lado direito do sinal de igual, e cole a senha verdadeira do seu certificado colada ao `=`. Feche e salve. Me avise no chat quando terminar!"*
-7. Após o usuário confirmar que fez as cópias, atualize no `config.json` o nome exato do arquivo `.p12` que ele disse ter copiado para a pasta, e agora, você deve prosseguir para o **Passo Final de Validação Técnica**.
+> **Bloqueio de segurança na alíquota:** aguarde obrigatoriamente a resposta do usuário.
+> - **Não avance** com o padrão 2% (0.02) por conta própria se o arquivo tiver 0.0.
+> - **Pergunte:** *"Qual a alíquota de ISS para o seu código de serviço? Posso ajudar a descobrir."*
+> - **Ajuda ativa:** se não souber, pesquise cruzando o código de serviço com as alíquotas de SP e sugira: *"Encontrei que para o serviço X a alíquota em SP costuma ser Y%. Confirma?"*
+> - **Só prossiga** quando o usuário informar um número ou confirmar a sugestão.
 
-8. **"Batismo de Fogo" (Teste de Emissão Obrigatório):** Antes de considerar a instalação concluída, você **DEVE** realizar um faturamento de teste para validar a assinatura digital e a conexão com a prefeitura.
-   - **Ação Autônoma:** Gere silenciosamente o arquivo `/tmp/test_instalacao.json` com os seguintes dados:
-     * `valor_servicos`: 150.00
-     * `indicador_tomador`: 2 (CNPJ)
-     * `documento_tomador`: "00000000000191"
-     * `razao_social_tomador`: "CLIENTE TESTE - OPENCLAW"
-     * `iss_retido`: "N"
-     * `discriminacao`: "Teste técnico de integração e assinatura digital - OpenClaw"
-   - **Execução:** Rode obrigatoriamente: `python3 emitir_nfse.py --modo teste --dados /tmp/test_instalacao.json --json-out`
-   - **Conclusão:** 
-     * Se o retorno for `Sucesso: True`, parabenize o usuário: *"Parabéns! Sua instalação foi validada com sucesso em modo teste. Agora você já pode emitir notas reais!"*
-     * Se der erro, analise o código de erro retornado pela Prefeitura e ajude o usuário a corrigir os dados (ex: se o erro for 1056/1057, cheque a Inscrição Municipal ou a Senha). 
-     * **NUNCA** incremente o `contador_rps.txt` após um teste, seja bem ou mal sucedido
+2. A cada resposta, **você mesmo** grava os dados no `config.json`.
+3. **Prepare o `.env`:** copie (ou renomeie) o modelo `env.example` para `.env` (oculto) na pasta, pronto para a senha.
+4. **Privacidade do `.env`:** você **JAMAIS** lê o conteúdo do `.env` para conferir a senha. Parta do princípio de que foi preenchida e diga: *"Por segurança, não tenho permissão para ler seu arquivo .env. Vou confiar que você inseriu a senha e seguir com o teste."*
+5. **Certificado e senha (etapa manual do usuário):** oriente exatamente assim:
+   > *"Pronto, preenchi os dados da empresa! Agora, por segurança, faça a última etapa manualmente: abra a pasta da skill no seu computador e arraste para lá o seu certificado (ex.: `Certificado.p12`). Depois abra o arquivo oculto `.env` (no Mac, `Command + Shift + .` mostra arquivos ocultos), troque o lado direito de `NFSE_CERT_PASSWORD=` pela senha verdadeira do certificado, salve e me avise."*
+6. Quando o usuário confirmar, atualize no `config.json` o nome exato do `.p12` copiado e siga para o teste.
+7. **"Batismo de Fogo" (teste obrigatório):** antes de concluir a instalação, faça uma emissão de teste para validar a assinatura e a conexão.
+   - Gere silenciosamente `/tmp/test_instalacao.json` com: `valor_servicos` 150.00, `indicador_tomador` 2, `documento_tomador` "00000000000191", `razao_social_tomador` "CLIENTE TESTE - OPENCLAW", `iss_retido` "N", `discriminacao` "Teste tecnico de integracao e assinatura digital".
+   - Rode: `python3 emitir_nfse.py --modo teste --dados /tmp/test_instalacao.json --json-out`
+   - Se `sucesso: true`, parabenize: *"Sua instalação foi validada em modo teste. Já pode emitir notas reais!"*
+   - Se der erro, analise o código retornado e ajude a corrigir (ex.: 1056/1057 → cheque Inscrição Municipal ou senha).
+   - **NUNCA** incremente o `contador_rps.txt` após um teste, com ou sem sucesso.
 
 ---
 
-## 🚀 1. O Fluxo de Coleta e Emissão no Chat
-Siga as 6 etapas abaixo sempre que o usuário solicitar emissão:
+## 1. Fluxo de Emissão
 
-**1. Recepção de Pedido:** O usuário pedirá a nota (Valor e Tomador). Ex: "Nota de 1500 para a AMIL".
-**2. Triagem Local (`tomadores.json`):** Leia o arquivo `tomadores.json` em background. Se o Tomador já estiver cadastrado, puxe o CNPJ, endereço e e-mail de lá. Se for inédito, peça ao usuário os dados faltantes.
-**3. Simulação Financeira (Draft):** Calcule os impostos internamente cruzando com as regras do `config.json`. Responda ao usuário com um "Esboço" detalhado (Valor Bruto, valor de cada retenção aplicada, Total Líquido e Preview da Discriminação da nota).
-> ⚠️ **ATENÇÃO - REGRA CRÍTICA DE CARACTERES E QUEBRAS DE LINHA (ERRO 1057):**
-> O sistema de assinatura XML da Prefeitura de SP quebra e retorna o Erro 1057 se o payload JSON contiver acentuações, caracteres especiais (ç, ~, ^, ´) ou quebras de linha literais (`\n`) nos campos descritivos e razões sociais. Antes de enviar para o payload:
-> - Remova **TODOS** os acentos e "ç" da Razão Social do Tomador e da Discriminação (ex: "SAÚDE" -> "SAUDE", "SERVIÇOS" -> "SERVICOS").
-> - Remova quebras de linha (`\n`) da Discriminação, juntando todo o texto em um único parágrafo contínuo.
-**4. Oitiva Humana:** Pergunte se o usuário "Aprova o Faturamento".
-**5. Emissão e RPS:** 
-   * Se aprovado, leia `contador_rps.txt` para pegar o próximo número sequencial X.
-   * Gere o arquivo `/tmp/dados_rps_X.json` autônomamente.
-   * Execute: `python emitir_nfse.py --modo producao --dados /tmp/dados_rps_X.json --json-out`
-   * Imediatamente incremente `contador_rps.txt` (+1).
-   * **Boas práticas:** Após o passo acima finalizar, você (o Agente) deve **excluir** o arquivo temporário `/tmp/dados_rps_X.json` para manter o sistema limpo.
-**6. Entrega do PDF Final e Envio por E-mail:** Leia a saída JSON do Python. Extraia e devolva ao humano no chat:
-   * O sucesso da operação e o Número Final da NF-e gerada.
-   * A **URL Oficial de Impressão (PDF)** da prefeitura.
-   * **Ação Autônoma Obrigatória:** Como a prefeitura bloqueia o envio público, invoque a sua **Skill GOG (Gestão de E-mails)** e redija um e-mail formatado enviando este link do PDF para o seu próprio e-mail.
-   * *Bônus: Se for cliente inédito aprovado, reescreva e salve os novos dados em `tomadores.json`.*
+> ### 🟢 PASSO ZERO — qual layout? (decida ANTES de montar a nota)
+> Defina o layout nesta ordem de prioridade:
+> 1. **Data ≥ 01/01/2027?** → **Layout 2** (`emitir_nfse_v2.py`), obrigatório. Não pergunte.
+> 2. **Existe `"layout_preferido"` no `config.json`?** → respeite ("1" ou "2"). Não pergunte.
+> 3. **O usuário já disse o layout?** → use o que ele disse.
+> 4. **Senão (2026, sem preferência):** **PERGUNTE**, de forma curta:
+>    > *"Em qual layout quer emitir?*
+>    > *• **Layout 1** — tradicional, só ISS. Mais simples. Válido em 2026.*
+>    > *• **Layout 2** — já com IBS/CBS (Reforma). Em 2026 os valores são informativos, você não paga nada a mais; vira obrigatório em 2027 (bom 'ensaio').*
+>    > *Qual prefere?"*
+>
+> Se o usuário fixar uma preferência ("sempre Layout 2"), **grave** `"layout_preferido"` no `config.json` e pare de perguntar. Se pedir recomendação, sugira a **abordagem híbrida** (emitir real no Layout 1 + testar o Layout 2 em `--modo teste`). Para o Layout 2, confirme o enquadramento fiscal antes da 1ª emissão real (Seção 7).
+>
+> **Layout 1 → `emitir_nfse.py`** (este fluxo). **Layout 2 → `emitir_nfse_v2.py`** (Seção 7 para payload e códigos). As 6 etapas abaixo valem para os dois.
 
-## �️ 2. O Fluxo de Cancelamento de NF-e
-Se o usuário pedir explícitamente "Cancele a nota numero N", siga 3 etapas:
-1. Revise e peça confirmação: "Deseja mesmo revogar definitivamente a Nota SP Nº N?".
-2. Se Sim, invoque via terminal: `python cancelar_nfse.py [N] --json-out`
-3. Leia o stdout JSON e informe ao usuário se ela foi cancelada com sucesso no ambiente contábil de São Paulo.
+**1. Recepção do pedido:** o usuário pede a nota (valor e tomador). Ex.: "Nota de 1500 para a AMIL". Resolva o PASSO ZERO antes de prosseguir.
 
-## 📊 3. Fluxo de Relatórios Contábeis (Extrato de Notas)
-A qualquer momento o usuário pode solicitar um relatório, balanço total ou extração de faturamentos (Ex: "Feche a contabilidade do mês passado").
-Use o script `baixar_notas.py` que consulta a Prefeitura e produz um extrato autônomo. Regras de uso:
-1. **Para busca retroativa em dias:** `python baixar_notas.py --dias X` (Padrão 30 dias se o usuário não disser outra coisa).
-2. **Para busca em meses/períodos exatos:** `python baixar_notas.py --inicio YYYY-MM-DD --fim YYYY-MM-DD` (O script já tem um loop autônomo que fatiará janelas grandes de >30 dias sem quebrar a API, fique tranquilo).
-3. **Resumo Visual:** Leia o console stdout dessa requisição (que contém `Valor Faturado (Bruto Ativo)` e `Notas Ativas`) para dar no chat o seu overview financeiro humano sobre o fechamento pedido.
-4. **Exportação Físisca:** A prefeitura exportará tudo formatado em um novo arquivo JSON. Se a oitiva humana do usuário quiser esse relatório em mãos ("Mande essas notas pro contador", ou "Mande pro meu email"), use a sua Skill Nativa GOG e anexe/envie o resultado do arquivo gerado (`nfse_contabilidade.json`) para os e-mails informados.
+**2. Triagem (`tomadores.json`):** leia o cadastro. Se o tomador já existe, puxe CNPJ, endereço e e-mail de lá. Se for novo, peça os dados faltantes.
 
-## 📄 3. Geração do Payload JSON Único para Emissão
-Para o Passo 5 acima, gere um `/tmp/dados_rps_XXX.json` unicamente para o atendimento.
-Modelo:
+**3. Simulação financeira (esboço):** calcule os impostos cruzando com o `config.json` e apresente um esboço claro:
+
+> | Item | Alíquota | Valor (R$) |
+> |---|---:|---:|
+> | **Valor bruto dos serviços** | — | X,XX |
+> | **Débitos próprios (informativos):** | | |
+> | ↳ PIS | 0,65% | informativo |
+> | ↳ COFINS | 3,00% | informativo |
+> | **Retenções (descontam do recebido):** | | |
+> | ↳ Retenção PCC consolidada | 4,65% | −X,XX |
+> | ↳ IRRF | 1,50% | −X,XX |
+> | **Valor líquido a receber** | | X,XX |
+> | ISS (destacado, não retido no padrão) | 2% | X,XX |
+>
+> **Explique ao usuário:** PIS e COFINS são *débitos próprios* (aparecem na nota desde 2026 mesmo sem retenção). Quando há fonte pagadora PJ, ela retém o PCC (4,65%) e recolhe em nome do prestador, o que quita o PIS/COFINS do mês (a CSLL pode sobrar diferença trimestral).
+>
+> ⚠️ **Quando NÃO há retenção:** se a nota for para **Pessoa Física pura** (sem intermediário), **remova as linhas de retenção** do esboço — mostre só bruto, débitos próprios, ISS e líquido (= bruto). **Se houver intermediário** (operadora que paga), **mantenha as retenções** mesmo sem tomador identificado. O script aplica a regra sozinho; o esboço deve refletir. (Detalhes na Seção 2.)
+
+**4. Oitiva humana:** pergunte se o usuário **aprova o faturamento**.
+
+**5. Emissão e RPS:**
+- Leia o `contador_rps.txt` para pegar o próximo número X.
+- Gere `/tmp/dados_rps_X.json` (Seção 2; no Layout 2 use `valor_final_cobrado` no lugar de `valor_servicos`).
+- Execute conforme o layout do PASSO ZERO:
+  - **Layout 1:** `python emitir_nfse.py --modo producao --dados /tmp/dados_rps_X.json --json-out`
+  - **Layout 2:** `python emitir_nfse_v2.py --modo producao --dados /tmp/dados_rps_X.json --json-out`
+- Incremente o `contador_rps.txt` (+1) imediatamente.
+- Exclua o `/tmp/dados_rps_X.json` ao final, para manter o sistema limpo.
+
+> **Flags de teste (ambos os scripts aceitam):**
+> - `--modo teste` → envia para o ambiente de **homologação** da Prefeitura (valida tudo, mas **não emite** nota real).
+> - `--dry-run` → monta e assina o XML **localmente** e **não envia nada** (nem para homologação). Útil para conferir o XML/payload sem rede. **Em teste/dry-run, NUNCA incremente o `contador_rps.txt`.**
+
+**6. Entrega:** leia a saída JSON (Seção 5) e devolva ao usuário: o sucesso, o **número da NF-e** e a **URL oficial do PDF**. Como a Prefeitura bloqueia o envio público, invoque a **Skill GOG (e-mails)** para enviar o link do PDF ao próprio e-mail do usuário. Se o tomador for novo e aprovado, salve-o no `tomadores.json`.
+
+---
+
+## 2. Geração do Payload JSON (Layout 1)
+
+Para o passo 5, gere um `/tmp/dados_rps_XXX.json` exclusivo para o atendimento.
+
+> [!IMPORTANT]
+> **SANITIZAÇÃO OBRIGATÓRIA (evita o erro de assinatura / 1057).**
+> A Prefeitura valida a assinatura comparando o XML com um digest interno; acentos e quebras de linha quebram essa comparação. A regra vale para **os campos que VOCÊ (agente) preenche no JSON**:
+> 1. **Remova acentos e `ç`** de `razao_social_tomador`, `discriminacao` e campos de endereço (`logradouro`, `complemento`, `bairro`). Ex.: `SAÚDE → SAUDE`, `SERVIÇOS → SERVICOS`.
+> 2. **Remova quebras de linha** (`\n`, `\r`) da `discriminacao`, juntando tudo em um parágrafo único.
+>
+> A `mensagem_padrao` do `config.json` (texto fixo que o script anexa à discriminação) é responsabilidade do config — não precisa sanitizá-la a cada nota; se ela causar erro de assinatura, ajuste-a uma vez no `config.json`.
+
+> [!IMPORTANT]
+> **RETENÇÕES VÃO NOS CAMPOS PRÓPRIOS — nunca apenas no texto.**
+> As retenções (PIS/COFINS/CSLL/IRRF) são gravadas nos campos `<ValorPIS/COFINS/CSLL/IR>`, e **o script os preenche automaticamente**. Você não calcula nem escreve retenção na mão. Regras:
+> 1. **Sempre** inclua `"calcular_retencoes": true`. Sem isso, os campos saem em branco (o erro a evitar). O script lê as alíquotas do `config.json` e preenche sozinho.
+> 2. **Nunca** coloque valores de imposto na `discriminacao` — ela é só o texto do serviço (+ a `mensagem_padrao`, que o script anexa).
+> 3. **Quem retém é a fonte pagadora PJ.** Há retenção quando: o **tomador é PJ** (`indicador_tomador: 2`) **OU** há **intermediário** (bloco `intermediario` com CNPJ — operadora/plataforma que paga e retém, mesmo sem tomador identificado). **Não há** retenção para **PF** (`1`) ou exterior (`4`) **sem** intermediário — nesse caso fica só o débito próprio PIS/COFINS. Override: `"tomador_retem": true|false` (ex.: PJ do Simples → `false`).
+> 4. **Piso de R$ 10:** mesmo com fonte pagadora PJ, o script dispensa a retenção abaixo do mínimo legal (CSRF e IRRF de R$ 10 — Lei 10.833 art. 31). Notas de valor baixo podem sair sem retenção: é correto. O débito próprio é mantido.
+> 5. **Confira** ao final: `calcular_retencoes: true`, nenhum imposto na `discriminacao`, e `intermediario` preenchido quando o pagamento vem via operadora.
+
+### Modelo A — Tomador identificado (PJ ou PF)
 ```json
 {
   "numero_rps": <Lido_do_contador_rps.txt>,
@@ -110,31 +203,145 @@ Modelo:
   "iss_retido": "N",
   "calcular_retencoes": true,
   "valor_servicos": 150.00,
-  "indicador_tomador": 2, // 2 para CNPJ, 1 para CPF, 3 para Sem Identificação
+  "indicador_tomador": 2, // 2=CNPJ (PJ, retém) | 1=CPF (PF, não retém sem intermediário) | 3=Sem ID | 4=NIF/exterior
   "documento_tomador": "<Apenas_Numeros>",
-  "razao_social_tomador": "<Nome_Empresa>",
+  // "tomador_retem": false,  // (opcional) só p/ PJ que não retém, ex. Simples Nacional
+  "razao_social_tomador": "<Nome_ou_Razao_Social_SEM_ACENTOS>",
   "email_tomador": "<Email_Cliente>",
+  // endereco_tomador: OBRIGATÓRIO só para tomador PJ (CNPJ). Para PF (CPF),
+  // OMITA o bloco inteiro se não tiver o endereço — NUNCA invente dados falsos.
   "endereco_tomador": {
       "logradouro": "RUA X", "numero": "123", "bairro": "VILA Y", "cidade": "3550308", "uf": "SP", "cep": "00000000"
   },
-  "discriminacao": "<Suas_Instrucoes_Extras>"
+  "discriminacao": "<Texto_do_servico_SEM_ACENTOS>"
 }
+```
+> **Endereço:** inclua o bloco `endereco_tomador` para **PJ (CNPJ)**. Para **PF (CPF)**, ele é opcional — se o usuário não informou o endereço, **omita o bloco** (não preencha com "NAO INFORMADO" nem dados inventados).
+
+### Modelo B — SEM tomador identificado, COM intermediário
+Para serviços pagos por **operadora/plataforma** (ex.: plano de saúde), sem tomador final identificado. O **intermediário é a fonte pagadora PJ e retém** — por isso `calcular_retencoes` segue `true`.
+```json
+{
+  "numero_rps": <Lido_do_contador_rps.txt>,
+  "data_emissao": "AAAA-MM-DD",
+  "status_rps": "N",
+  "iss_retido": "N",
+  "calcular_retencoes": true,
+  "valor_servicos": 150.00,
+  "indicador_tomador": 3,            // 3 = Sem identificação do tomador
+  // NÃO inclua documento_tomador nem endereco_tomador (tomador vazio).
+  // razao_social_tomador é opcional (ex.: "NAO INFORMADO").
+  "intermediario": {
+      "cnpj": "<CNPJ_da_operadora>",          // só números — é a fonte pagadora que retém
+      "inscricao_municipal": "<IM_ou_vazio>",  // opcional
+      "iss_retido": false                       // true se o intermediário retém o ISS
+  },
+  "discriminacao": "<Texto_do_servico>"
+}
+```
+> Com `indicador_tomador: 3` o script não gera o bloco `<CPFCNPJTomador>` (tomador vazio), mas inclui o intermediário e **calcula as retenções** (há fonte pagadora PJ). Sempre preencha o `cnpj` do intermediário — é ele que dispara a retenção.
+
+---
+
+## 3. Cancelamento de NF-e
+Quando o usuário pedir "cancele a nota N":
+1. Confirme: *"Deseja mesmo revogar definitivamente a Nota SP nº N?"*
+2. Se sim: `python cancelar_nfse.py [N] --json-out`
+3. Leia o JSON e informe se o cancelamento foi aceito pela Prefeitura.
+
+---
+
+## 4. Relatórios Contábeis (extrato de notas)
+Quando o usuário pedir um relatório/balanço (ex.: "feche a contabilidade do mês passado"), use `baixar_notas.py`:
+1. **Por dias:** `python baixar_notas.py --dias X` (padrão 30).
+2. **Por período exato:** `python baixar_notas.py --inicio AAAA-MM-DD --fim AAAA-MM-DD` (o script fatia janelas > 30 dias sozinho).
+3. **Resumo:** leia o stdout (`Valor Faturado (Bruto Ativo)` e `Notas Ativas`) e dê um panorama humano do fechamento.
+4. **Exportação:** o resultado vai para `nfse_contabilidade.json`. Se o usuário quiser ("manda pro contador/meu e-mail"), use a Skill GOG e anexe esse arquivo.
+
+---
+
+## 5. Tratamento da Saída (stdout JSON)
+Os scripts sempre retornam JSON. Emissão:
+```json
+{ "sucesso": true, "notas_geradas": [{"numero": "8952", "url_pdf": "https://..."}] }
+```
+Cancelamento:
+```json
+{ "sucesso": true, "mensagem": "NF-e 642 cancelada com sucesso!" }
+```
+Faça o parsing e formule respostas humanas e completas no chat. Nunca despeje JSON puro ao usuário, a menos que ele peça.
+
+---
+
+## 6. Códigos de Erro da Prefeitura SP
+Quando o retorno for `"sucesso": false`, traduza para linguagem simples e proponha a correção:
+
+| Código | Causa provável | Ação |
+|:---:|---|---|
+| **260** | CEP do tomador inválido | Validar contra CEPs reais de SP (ex.: `01310100`) |
+| **268** | Código NBS inválido (Layout 2) | Pegar o NBS correto no Anexo VIII e remover os pontos (Seção 7) |
+| **630** | Código indicador de operação inexistente (Layout 2) | Pegar o `cIndOp` correto no Anexo VIII (Seção 7) |
+| **640** | `ValorInicialCobrado` indisponível (Layout 2) | Usar `valor_final_cobrado` no JSON (o script já faz) |
+| **1001** | XML incompatível com o schema | Ver qual campo foi rejeitado; a mensagem lista os elementos válidos esperados. Para `<TipoRetencao>`, confirme `emitir_tipo_retencao=false` |
+| **1050** | Certificado inválido | Verificar validade do `.p12` (ver abaixo); renovar com a AC se expirado |
+| **1056 / 1057** | Inscrição municipal ou assinatura RPS incorreta | Conferir IM no portal; verificar acentos/quebras na discriminação (Seção 2) |
+| **1206** | Intermediário em formato inválido | Verificar o bloco `intermediario` no JSON |
+
+### 🛡️ Validação preventiva do certificado
+**Antes** de qualquer emissão (se não checou recentemente), valide a expiração do certificado:
+```bash
+./.venv/bin/python -c "from cryptography.hazmat.primitives.serialization import pkcs12; from dotenv import load_dotenv; import os; load_dotenv(); print(pkcs12.load_key_and_certificates(open('Certificados.p12','rb').read(), os.environ['NFSE_CERT_PASSWORD'].encode())[1].not_valid_after_utc)"
+```
+Se faltarem **menos de 30 dias**, avise o usuário proativamente para renovar.
+
+---
+
+## 7. Layout 2 (IBSCBS) — manual operacional
+
+> Use esta seção quando o PASSO ZERO (Seção 1) definir Layout 2 — a pedido do usuário em 2026, ou automaticamente a partir de 2027.
+
+### Como emitir
+`emitir_nfse_v2.py` tem as mesmas flags do v1, mais `--selftest` e `--no-validate`:
+```bash
+python emitir_nfse_v2.py --selftest                                   # valida a assinatura (offline)
+python emitir_nfse_v2.py --modo teste --dados nota.json --dry-run     # monta + valida XML vs XSD (offline)
+python emitir_nfse_v2.py --modo teste --dados nota.json --json-out    # teste real (homologação, não emite)
+python emitir_nfse_v2.py --modo producao --dados nota.json --json-out # emissão REAL
+```
+O script **valida o XML contra o XSD oficial** (`schemas_oficiais_sp/xsd_completo/`) antes de enviar — corrija erros de estrutura antes de gastar requisição.
+
+### Diferenças do payload (v2)
+O RPS v2 **não tem** `valor_servicos`. Use:
+- `valor_final_cobrado` (valor total da nota, com tributos) — substitui `valor_servicos`
+- `valor_pis`, `valor_cofins`, `valor_inss`, `valor_ir`, `valor_csll` (já calculados; o script aplica a regra de fonte pagadora PJ da Seção 2)
+- `valor_ipi` (0 p/ serviços), `exigibilidade_suspensa` (0), `pagamento_parcelado_antecipado` (0)
+- Os códigos IBSCBS (`nbs`, `c_ind_op`, `cclasstrib`) vêm do `config.json` → bloco `ibscbs`
+
+### 🔎 Como achar os códigos NBS / cIndOp / cClassTrib
+São 3 códigos que classificam o serviço para o IBS/CBS. Busque-os assim:
+1. Abra a tabela oficial arquivada: `schemas_oficiais_sp/AnexoVIII-Correlacao-Item-NBS-IndOp-cClassTrib_*.xlsx` (ou baixe de [gov.br/nfse → doc. técnica → RTC](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc)).
+2. Leia a aba **"tabela geral"** (com openpyxl). Colunas: `Item LC 116 | Descrição | NBS | INDOP | cClassTrib`.
+3. Filtre pelo **Item da LC 116** do serviço (medicina = grupo `04.xx`) ou pela descrição.
+4. Extraia **NBS**, **INDOP** (=cIndOp) e **cClassTrib**.
+5. Formate o NBS sem pontos (`1.2301.22.00` → `123012200`) e grave no `config.json` → `ibscbs`.
+6. **Sempre confirme o enquadramento com o usuário/contador** — o NBS muda por especialidade.
+
+```python
+import openpyxl
+wb = openpyxl.load_workbook('schemas_oficiais_sp/AnexoVIII-Correlacao-Item-NBS-IndOp-cClassTrib_v1.01.00.xlsx', data_only=True)
+ws = wb['tabela geral']
+for r in ws.iter_rows(values_only=True):
+    if r[0] and str(r[0]).startswith('04.'):   # serviços de saúde
+        print(r[0], '| NBS', r[2], '| cIndOp', r[6], '| cClassTrib', r[8])
 ```
 
-## 🟢 4. Tratamento do Standard Output
-As requisições sempre retornarão um JSON formatado pelo script.
-Exemplo de Resposta do Emitir:
-```json
-{
-  "sucesso": true,
-  "notas_geradas": [{"numero": "8952", "url_pdf": "https://..."}]
-}
-```
-Exemplo de Resposta do Cancelar:
-```json
-{
-  "sucesso": true,
-  "mensagem": "NF-e 642 cancelada com sucesso!"
-}
-```
-Use o parsing inteligente desses JSONs para formular suas respostas humanas ricas e completas no Chat do OpenClaw. Nunca despeje JSON puro para o usuário a menos que solicitado.
+### Valores já validados (MEDICINA — item 04.01, no config por padrão)
+| Campo | Valor | Significado |
+|---|---|---|
+| `nbs` | `123012200` | Serviços médicos especializados (NBS 1.2301.22.00) |
+| `c_ind_op` | `030101` | Local de incidência: local da prestação |
+| `cclasstrib` | `200029` | Saúde humana (Anexo III) — **com redução de alíquota** |
+
+> ⚠️ **Saúde não é tributação integral.** Use `cClassTrib 200029` (redução ~60%), nunca `000001`. Os itens 04.01 (medicina) e 04.03 (clínica/hospital) têm a **mesma tributação** — muda só o NBS. Veterinária (05.01) é diferente (`200052`, redução 30%); planos de saúde (04.22) usam regime próprio (`820001`).
+
+Os erros específicos do Layout 2 (268, 630, 640) estão no catálogo da Seção 6.
